@@ -1,0 +1,18 @@
+# Godot 4
+.godot/
+.import/
+*.translation
+export_credentials.cfg
+# Android / exportación
+android/
+build/
+*.apk
+*.aab
+*.idsig
+*.keystore
+*.jks
+# Varios
+.mono/
+data_*/
+mono_crash.*.json
+.DS_Store

@@ -1,0 +1,40 @@
+; Cavila - colección de puzles de lógica
+config_version=5
+
+[application]
+
+config/name="Cavila"
+config/description="Colección de puzles de lógica sin conexión para entrenar la mente."
+run/main_scene="res://ui/main_menu.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Progress="*res://core/progress.gd"
+Game="*res://core/game.gd"
+
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/size/window_width_override=405
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=true
+
+[internationalization]
+
+locale/fallback="es"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.07, 0.086, 0.114, 1)
