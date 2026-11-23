@@ -81,13 +81,20 @@ func _open_puzzle() -> void:
 
 
 func finish(won: bool) -> void:
-	last_result = {"won": won, "time": elapsed, "lives": lives, "hints": hints_used}
+	var stars := stars_for(MAX_LIVES - lives, hints_used) if won else 0
+	last_result = {"won": won, "time": elapsed, "lives": lives, "hints": hints_used, "stars": stars}
 	if won:
 		if daily_key != "":
 			Progress.mark_daily(daily_key, puzzle_id)
 		else:
-			Progress.mark_done(puzzle_id, difficulty, index, elapsed, lives)
+			Progress.mark_done(puzzle_id, difficulty, index, elapsed, lives, stars)
 	get_tree().change_scene_to_file.call_deferred("res://ui/victory.tscn")
+
+
+## 3 estrellas sin errores ni pistas; se resta una por cada vida perdida o pista (mínimo 1).
+static func stars_for(lives_lost: int, hints_used_n: int) -> int:
+	var penalty := lives_lost + hints_used_n
+	return 3 if penalty == 0 else (2 if penalty <= 2 else 1)
 
 
 func go_menu() -> void:

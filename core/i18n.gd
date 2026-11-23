@@ -43,6 +43,10 @@ const STRINGS := {
 	"RETRY": ["Reintentar", "Torna-ho a provar"],
 	"REPLAY": ["Jugar de nuevo", "Torna a jugar"],
 	"MENU": ["Menú", "Menú"],
+	"TAGLINE": ["Puzles para pensar", "Puzles per pensar"],
+	"DAILY_SUB": ["Un reto nuevo cada día", "Un repte nou cada dia"],
+	"PLAYED": ["niveles", "nivells"],
+	"LEVELS": ["Niveles", "Nivells"],
 	"LANG_NAME": ["ES", "CA"],
 }
 

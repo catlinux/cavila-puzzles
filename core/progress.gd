@@ -33,7 +33,7 @@ func _key(puzzle_id: String, difficulty: int) -> String:
 	return "%s:%d" % [puzzle_id, difficulty]
 
 
-func mark_done(puzzle_id: String, difficulty: int, index: int, time_s: float, lives_left: int) -> void:
+func mark_done(puzzle_id: String, difficulty: int, index: int, time_s: float, lives_left: int, stars: int = 0) -> void:
 	var levels: Dictionary = data["levels"]
 	var k := _key(puzzle_id, difficulty)
 	if not levels.has(k):
@@ -42,13 +42,26 @@ func mark_done(puzzle_id: String, difficulty: int, index: int, time_s: float, li
 	var best := time_s
 	if prev is Dictionary and prev.get("t", INF) < time_s:
 		best = prev["t"]
-	levels[k][str(index)] = {"t": snappedf(best, 0.1), "l": lives_left}
+	var best_stars := maxi(stars, int(prev.get("s", 0)) if prev is Dictionary else 0)
+	levels[k][str(index)] = {"t": snappedf(best, 0.1), "l": lives_left, "s": best_stars}
 	save()
 
 
 func is_done(puzzle_id: String, difficulty: int, index: int) -> bool:
 	var lv = data["levels"].get(_key(puzzle_id, difficulty), {})
 	return lv.has(str(index))
+
+
+func get_stars(puzzle_id: String, difficulty: int, index: int) -> int:
+	var e = data["levels"].get(_key(puzzle_id, difficulty), {}).get(str(index), null)
+	return int(e.get("s", 0)) if e is Dictionary else 0
+
+
+func total_done(puzzle_id: String) -> int:
+	var n := 0
+	for d in 3:
+		n += done_count(puzzle_id, d)
+	return n
 
 
 func done_count(puzzle_id: String, difficulty: int) -> int:

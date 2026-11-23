@@ -46,6 +46,10 @@ func run() -> void:
 			var p: Dictionary = lg.generate(Rng.level_seed(e.id, d, 0), d)
 			check(not p.is_empty(), "%s d%d genera" % [e.id, d])
 
+	# Estrellas.
+	var GameScript = load("res://core/game.gd")
+	check(GameScript.stars_for(0, 0) == 3 and GameScript.stars_for(1, 1) == 2 and GameScript.stars_for(2, 2) == 1, "reglas de estrellas")
+
 	# Progreso guardado.
 	var path := "user://test_progress.json"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
@@ -53,9 +57,9 @@ func run() -> void:
 	pr.save_path = path
 	pr.load_data()
 	check(pr.highest_unlocked("circuito", 0) == 0, "al inicio solo el nivel 0")
-	pr.mark_done("circuito", 0, 0, 30.0, 3)
-	pr.mark_done("circuito", 0, 1, 20.0, 2)
-	pr.mark_done("circuito", 0, 1, 25.0, 1)  # peor tiempo: no pisa el mejor
+	pr.mark_done("circuito", 0, 0, 30.0, 3, 3)
+	pr.mark_done("circuito", 0, 1, 20.0, 2, 2)
+	pr.mark_done("circuito", 0, 1, 25.0, 1, 1)  # peor resultado: no pisa el mejor
 	pr.mark_daily("2026-03-01", "sendero")
 	pr.set_language("ca")
 	var pr2 = ProgressScript.new()
@@ -65,6 +69,8 @@ func run() -> void:
 	check(pr2.highest_unlocked("circuito", 0) == 2, "se desbloquea el siguiente")
 	check(pr2.done_count("circuito", 0) == 2 and pr2.done_count("circuito", 1) == 0, "contadores por dificultad")
 	check(is_equal_approx(pr2.data["levels"]["circuito:0"]["1"]["t"], 20.0), "se conserva el mejor tiempo")
+	check(pr2.get_stars("circuito", 0, 1) == 2 and pr2.get_stars("circuito", 0, 0) == 3, "se conservan las mejores estrellas")
+	check(pr2.total_done("circuito") == 2, "total de niveles completados")
 	check(pr2.daily_done("2026-03-01") and not pr2.daily_done("2026-03-02"), "diario completado")
 	check(pr2.get_language() == "ca", "idioma guardado")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
