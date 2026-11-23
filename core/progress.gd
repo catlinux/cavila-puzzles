@@ -12,6 +12,7 @@ func _ready() -> void:
 func _default() -> Dictionary:
 	return {"version": 2, "level": 1, "stars": {}, "hints": 3, "daily": {},
 		"streak": {"last": "", "count": 0},
+		"event": {"week": -1, "count": 0, "claimed": false},
 		"settings": {"lang": "", "sound": true, "vibration": true}}
 
 
@@ -66,8 +67,48 @@ func complete_level(level: int, star_count: int) -> Dictionary:
 	if first and level % 5 == 0:
 		bonus = 1
 		data["hints"] = hints() + 1
+	bonus += _event_progress()
 	save()
 	return {"first": first, "hint_bonus": bonus}
+
+
+# --- Evento semanal -----------------------------------------------------------------
+
+const EVENT_GOAL := 20
+const EVENT_REWARD := 3
+
+
+## Semana actual (número de semanas desde 1970, empezando en lunes).
+static func week_index(date_key: String = "") -> int:
+	var t := Time.get_unix_time_from_datetime_string((date_key if date_key != "" else Time.get_date_string_from_system()) + "T12:00:00")
+	var days := int(floor(t / 86400.0))
+	return (days + 3) / 7
+
+
+static func days_left_in_week(date_key: String = "") -> int:
+	var t := Time.get_unix_time_from_datetime_string((date_key if date_key != "" else Time.get_date_string_from_system()) + "T12:00:00")
+	var days := int(floor(t / 86400.0))
+	return 7 - (days + 3) % 7
+
+
+func event_state() -> Dictionary:
+	var ev: Dictionary = data["event"]
+	if int(ev["week"]) != week_index():
+		return {"week": week_index(), "count": 0, "claimed": false}
+	return ev
+
+
+## Suma un nivel al evento de la semana; al llegar a la meta da pistas (una vez).
+func _event_progress() -> int:
+	var ev := event_state()
+	ev["count"] = int(ev["count"]) + 1
+	var reward := 0
+	if int(ev["count"]) >= EVENT_GOAL and not ev["claimed"]:
+		ev["claimed"] = true
+		data["hints"] = hints() + EVENT_REWARD
+		reward = EVENT_REWARD
+	data["event"] = ev
+	return reward
 
 
 # --- Pistas -----------------------------------------------------------------------

@@ -9,16 +9,16 @@ const Rng = preload("res://core/rng.gd")
 
 const LEVELS_PER_WORLD := 30
 
-## Mundos: nombre (clave de traducción) y paleta [color A, color B, fondo arriba, fondo abajo].
+## Mundos: nombre (clave de traducción) y acento en degradado [a -> b].
 const WORLDS := [
-	{"key": "WORLD_ALBA", "a": Color8(94, 234, 212), "b": Color8(125, 211, 252), "top": Color8(16, 34, 48), "bottom": Color8(7, 12, 22)},
-	{"key": "WORLD_MAREA", "a": Color8(96, 165, 250), "b": Color8(129, 140, 248), "top": Color8(18, 26, 56), "bottom": Color8(7, 10, 26)},
-	{"key": "WORLD_AMBAR", "a": Color8(251, 191, 36), "b": Color8(251, 113, 133), "top": Color8(44, 26, 34), "bottom": Color8(15, 10, 18)},
-	{"key": "WORLD_BRUMA", "a": Color8(196, 181, 253), "b": Color8(244, 114, 182), "top": Color8(36, 24, 56), "bottom": Color8(12, 9, 24)},
-	{"key": "WORLD_BOSQUE", "a": Color8(134, 239, 172), "b": Color8(190, 242, 100), "top": Color8(14, 38, 32), "bottom": Color8(6, 14, 12)},
-	{"key": "WORLD_ASCUA", "a": Color8(253, 164, 175), "b": Color8(253, 186, 116), "top": Color8(48, 20, 26), "bottom": Color8(16, 8, 12)},
-	{"key": "WORLD_GLACIAR", "a": Color8(224, 242, 254), "b": Color8(103, 232, 249), "top": Color8(22, 38, 54), "bottom": Color8(8, 14, 24)},
-	{"key": "WORLD_NEBULA", "a": Color8(232, 121, 249), "b": Color8(129, 140, 248), "top": Color8(34, 16, 50), "bottom": Color8(10, 6, 20)},
+	{"key": "WORLD_ALBA", "a": Color8(255, 106, 85), "b": Color8(255, 154, 61)},
+	{"key": "WORLD_MAREA", "a": Color8(59, 130, 246), "b": Color8(34, 184, 207)},
+	{"key": "WORLD_AMBAR", "a": Color8(245, 158, 11), "b": Color8(249, 115, 22)},
+	{"key": "WORLD_BRUMA", "a": Color8(139, 92, 246), "b": Color8(217, 70, 239)},
+	{"key": "WORLD_BOSQUE", "a": Color8(16, 185, 129), "b": Color8(101, 192, 40)},
+	{"key": "WORLD_ASCUA", "a": Color8(239, 68, 68), "b": Color8(249, 115, 22)},
+	{"key": "WORLD_GLACIAR", "a": Color8(6, 182, 212), "b": Color8(59, 130, 246)},
+	{"key": "WORLD_NEBULA", "a": Color8(168, 85, 247), "b": Color8(99, 102, 241)},
 ]
 
 

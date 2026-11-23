@@ -15,7 +15,7 @@ func _ready() -> void:
 	Progress.save_path = "user://shots_save.json"
 	Progress.reset()
 	Progress.set_setting("sound", false)
-	for n in range(1, 12):
+	for n in range(1, 81):
 		Progress.complete_level(n, [3, 2, 3, 1, 3][n % 5])
 	Progress.complete_daily("2026-11-22")
 	var home = await _shot("res://ui/home.tscn", out + "/inicio.png", 0.6)
@@ -26,7 +26,7 @@ func _ready() -> void:
 	await get_tree().create_timer(0.4).timeout
 	await _save(out + "/ajustes.png")
 	home.queue_free()
-	for lv in [1, 12, 45, 140, 900]:
+	for lv in [1, 12, 81, 400, 900]:
 		Game.begin("level", lv)
 		var v = load("res://ui/play.tscn").instantiate()
 		add_child(v)
@@ -35,7 +35,7 @@ func _ready() -> void:
 		var order: Array = Arrows.solve(v.puzzle).order
 		for k in mini(order.size() / 3, 12):
 			v.tap_arrow(order[k])
-		if lv == 45:
+		if lv == 81:
 			v.use_hint()
 		await get_tree().create_timer(0.08).timeout
 		await _save("%s/nivel_%d.png" % [out, lv])

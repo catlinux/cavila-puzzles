@@ -47,10 +47,29 @@ func begin(new_mode: String, n: int = 1, key: String = "") -> void:
 	elapsed = 0.0
 
 
+var _cache := {}  # tableros ya generados (la miniatura del inicio y la partida comparten)
+
+
 func puzzle() -> Dictionary:
 	if mode == "daily":
-		return Arrows.generate(Daily.seed_for(daily_key), Daily.params_for(daily_key))
-	return Arrows.generate(Levels.seed_for(level), Levels.params_for(level))
+		return puzzle_for_daily(daily_key)
+	return puzzle_for_level(level)
+
+
+func puzzle_for_level(n: int) -> Dictionary:
+	var key := "L%d" % n
+	if not _cache.has(key):
+		if _cache.size() > 6:
+			_cache.clear()
+		_cache[key] = Arrows.generate(Levels.seed_for(n), Levels.params_for(n))
+	return _cache[key]
+
+
+func puzzle_for_daily(key: String) -> Dictionary:
+	var k := "D" + key
+	if not _cache.has(k):
+		_cache[k] = Arrows.generate(Daily.seed_for(key), Daily.params_for(key))
+	return _cache[k]
 
 
 func world() -> Dictionary:

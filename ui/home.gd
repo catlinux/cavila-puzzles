@@ -1,12 +1,15 @@
 extends Control
-## Pantalla de inicio: marca, reto diario, constelación de niveles y botón Jugar.
+## Inicio: marca, estrellas y pistas, tarjeta del siguiente nivel (miniatura, progreso del
+## mundo, camino de niveles y Jugar), reto diario y evento semanal.
 
-const Palette = preload("res://ui/palette.gd")
-const Kit = preload("res://ui/kit.gd")
+const Style = preload("res://ui/style.gd")
 const Levels = preload("res://game/levels.gd")
 const Daily = preload("res://core/daily.gd")
 const Backdrop = preload("res://ui/backdrop.gd")
-const IconButton = preload("res://ui/icon_button.gd")
+const RoundButton = preload("res://ui/widgets/round_button.gd")
+const PillButton = preload("res://ui/widgets/pill_button.gd")
+const Chip = preload("res://ui/widgets/chip.gd")
+const SettingsPanel = preload("res://ui/settings_panel.gd")
 
 const MONTHS := {
 	"es": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
@@ -15,315 +18,242 @@ const MONTHS := {
 
 var level := 1
 var world: Dictionary = {}
-var _constellation: Control
-var _nodes: Array = []  # [posición, nivel, radio]
-var _clock := 0.0
 var _settings: Control
+var _path: Control
+var _clock := 0.0
 
 
 func _ready() -> void:
 	level = Progress.current_level()
 	world = Levels.world(level)
-	var bg := Backdrop.new()
-	add_child(bg)
-	bg.set_world(world)
+	add_child(Backdrop.new())
 	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 56)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 34)
+	margin.add_theme_constant_override("margin_right", 34)
+	margin.add_theme_constant_override("margin_top", 84)
 	margin.add_theme_constant_override("margin_bottom", 40)
 	add_child(margin)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 22)
+	vb.add_theme_constant_override("separation", 34)
 	margin.add_child(vb)
 
 	# Cabecera.
 	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 16)
+	head.add_theme_constant_override("separation", 10)
 	vb.add_child(head)
-	var logo := Control.new()
-	logo.custom_minimum_size = Vector2(84, 84)
-	logo.draw.connect(_draw_logo.bind(logo))
-	head.add_child(logo)
-	var names := VBoxContainer.new()
-	names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	names.alignment = BoxContainer.ALIGNMENT_CENTER
-	names.add_theme_constant_override("separation", -6)
-	names.add_child(Kit.label("Cavila", 54, Palette.TEXT, HORIZONTAL_ALIGNMENT_LEFT, true))
-	names.add_child(Kit.label(tr("TAGLINE"), 22, world.a.lerp(Palette.TEXT, 0.4), HORIZONTAL_ALIGNMENT_LEFT))
-	head.add_child(names)
-	var chip := Control.new()
-	chip.custom_minimum_size = Vector2(120, 84)
-	chip.draw.connect(_draw_hint_chip.bind(chip))
-	head.add_child(chip)
-	var gear := IconButton.new("gear")
+	var mark := Control.new()
+	mark.custom_minimum_size = Vector2(76, 80)
+	mark.draw.connect(_draw_mark.bind(mark))
+	head.add_child(mark)
+	var name_l := Style.label("Cavila", 50, Style.INK, "display_bold")
+	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(name_l)
+	head.add_child(Chip.new("star-fill", Style.GOLD, str(Progress.total_stars())))
+	head.add_child(Chip.new("lightbulb-fill", Style.GOLD, str(Progress.hints())))
+	var gear := RoundButton.new("gear-six-bold", 70.0)
 	gear.pressed.connect(_open_settings)
 	head.add_child(gear)
 
-	# Reto diario.
-	var daily := Control.new()
-	daily.custom_minimum_size = Vector2(0, 176)
-	daily.mouse_filter = Control.MOUSE_FILTER_STOP
-	daily.draw.connect(_draw_daily.bind(daily))
+	# Tarjeta del siguiente nivel.
+	var hero := Style.card(56, 40)
+	vb.add_child(hero)
+	var hv := VBoxContainer.new()
+	hv.add_theme_constant_override("separation", 26)
+	hero.add_child(hv)
+	var top := HBoxContainer.new()
+	hv.add_child(top)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 0)
+	var wi := Levels.world_index(level)
+	info.add_child(Style.label(("%s %d · %s" % [tr("WORLD"), wi + 1, tr(world.key)]).to_upper(), 24, world.a, "body_bold"))
+	info.add_child(Style.label("%s %d" % [tr("LEVEL"), level], 86, Style.INK, "display_bold"))
+	var in_world := (level - 1) % Levels.LEVELS_PER_WORLD
+	var puzzle := Game.puzzle_for_level(level)
+	var meta := Style.label("%d %s %d %s · %d %s" % [in_world, tr("OF"), Levels.LEVELS_PER_WORLD, tr("LEVELS_IN_WORLD"),
+		puzzle.arrows.size(), tr("ARROWS_LEFT")], 25, Style.SUB, "body")
+	info.add_child(meta)
+	top.add_child(info)
+	var thumb := Control.new()
+	thumb.custom_minimum_size = Vector2(190, 250)
+	thumb.draw.connect(_draw_thumb.bind(thumb, puzzle))
+	top.add_child(thumb)
+	var track := Control.new()
+	track.custom_minimum_size = Vector2(0, 16)
+	track.draw.connect(func():
+		var r := Rect2(Vector2.ZERO, track.size)
+		Style.fill_round(track, r, 8.0, Style.TRACK, 6)
+		var f := maxf(float(in_world) / Levels.LEVELS_PER_WORLD, 0.04)
+		Style.gradient_shape(track, Rect2(r.position, Vector2(r.size.x * f, r.size.y)), 8.0, world.a, world.b))
+	hv.add_child(track)
+	_path = Control.new()
+	_path.custom_minimum_size = Vector2(0, 116)
+	_path.mouse_filter = Control.MOUSE_FILTER_STOP
+	_path.draw.connect(_draw_path)
+	_path.gui_input.connect(_path_input)
+	hv.add_child(_path)
+	var play := PillButton.new(tr("PLAY"), true, 122.0)
+	play.icon_name = "play-fill"
+	play.font_size = 48
+	play.set_colors(world.a, world.b)
+	play.pressed.connect(Game.start_level.bind(level))
+	hv.add_child(play)
+
+	# Reto diario y evento semanal.
+	var cards := HBoxContainer.new()
+	cards.add_theme_constant_override("separation", 26)
+	vb.add_child(cards)
+	var key := Daily.today_key()
+	var d0 := Time.get_date_dict_from_system()
+	var streak := Progress.streak(key)
+	var streak_txt: String = tr("STREAK_NONE") if streak == 0 else (tr("STREAK_LINE_1") if streak == 1 else tr("STREAK_LINE") % streak)
+	var daily_done := Progress.daily_done(key)
+	var daily := _small_card("calendar-blank-fill", Color8(255, 106, 85), tr("DAILY").to_upper(),
+		"%d %s" % [d0.day, MONTHS.get(Game.language(), MONTHS.es)[d0.month - 1]],
+		"check-bold" if daily_done else "fire-fill", Color8(16, 185, 129) if daily_done else Color8(255, 122, 61),
+		tr("DAILY_DONE") if daily_done else streak_txt)
 	daily.gui_input.connect(func(ev):
 		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
 			Game.start_daily())
-	vb.add_child(daily)
+	cards.add_child(daily)
+	var ev := Progress.event_state()
+	var left := Progress.days_left_in_week()
+	var ev_title: String = tr("EVENT_%d" % (int(ev.week) % 5))
+	var ev_done: bool = ev.claimed
+	var event := _small_card("trophy-fill", Color8(108, 76, 245),
+		"%s · %s" % [tr("EVENT").to_upper(), (tr("DAY_LEFT") if left == 1 else tr("DAYS_LEFT") % left).to_upper()],
+		ev_title, "check-bold" if ev_done else "star-fill", Color8(16, 185, 129) if ev_done else Style.GOLD,
+		tr("EVENT_DONE") if ev_done else "%d / %d %s" % [mini(int(ev.count), Progress.EVENT_GOAL), Progress.EVENT_GOAL, tr("LEVELS_IN_WORLD")])
+	cards.add_child(event)
+	Style.fade_in(self)
 
-	# Constelación de niveles.
-	_constellation = Control.new()
-	_constellation.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_constellation.mouse_filter = Control.MOUSE_FILTER_STOP
-	_constellation.draw.connect(_draw_constellation)
-	_constellation.gui_input.connect(_constellation_input)
-	vb.add_child(_constellation)
 
-	var play := Kit.button("%s · %s %d" % [tr("PLAY"), tr("LEVEL"), level], world.a, 38, true)
-	play.custom_minimum_size = Vector2(0, 118)
-	play.pressed.connect(Game.start_level.bind(level))
-	vb.add_child(play)
-	Kit.fade_in(self)
+func _small_card(icon: String, tint: Color, kicker: String, title: String, foot_icon: String, foot_col: Color, foot: String) -> PanelContainer:
+	var c := Style.card(44, 30)
+	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	c.custom_minimum_size = Vector2(0, 300)
+	c.mouse_filter = Control.MOUSE_FILTER_STOP
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	c.add_child(v)
+	var ic := Control.new()
+	ic.custom_minimum_size = Vector2(76, 76)
+	ic.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	ic.draw.connect(func():
+		Style.fill_round(ic, Rect2(Vector2.ZERO, Vector2(76, 76)), 22.0, Color(tint, 0.13), 6)
+		var t := Style.icon(icon, tint, 40)
+		ic.draw_texture(t, Vector2(18, 18)))
+	v.add_child(ic)
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 10)
+	v.add_child(gap)
+	v.add_child(Style.label(kicker, 21, Style.SUB, "body_bold"))
+	var t := Style.label(title, 40, Style.INK, "display")
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	t.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	t.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(t)
+	var foot_row := HBoxContainer.new()
+	foot_row.add_theme_constant_override("separation", 8)
+	var fi := TextureRect.new()
+	fi.texture = Style.icon(foot_icon, foot_col, 28)
+	fi.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	foot_row.add_child(fi)
+	foot_row.add_child(Style.label(foot, 24, Style.SUB, "body"))
+	v.add_child(foot_row)
+	return c
 
 
 func _process(delta: float) -> void:
 	_clock += delta
-	_constellation.queue_redraw()
+	_path.queue_redraw()
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		if _settings:
-			_close_settings()
+			_settings.queue_free()
+			_settings = null
 		else:
 			get_tree().quit()
 
 
+func _open_settings() -> void:
+	_settings = SettingsPanel.new(world.a, world.b)
+	_settings.closed.connect(func(): _settings = null)
+	add_child(_settings)
+
+
 # --- Dibujo -----------------------------------------------------------------------
 
-func _draw_logo(c: Control) -> void:
-	var r := Rect2(Vector2(2, 2), c.size - Vector2(4, 4))
-	Kit.card(c, r, 24, world.top.lightened(0.12), world.bottom, Color(world.a, 0.5), 2.0)
-	var u := r.size.x
-	var p0 := r.position + Vector2(0.28, 0.76) * u
-	var p1 := r.position + Vector2(0.28, 0.5) * u
-	var p2 := r.position + Vector2(0.56, 0.5) * u
-	var p3 := r.position + Vector2(0.56, 0.3) * u
-	for seg in [[p0, p1], [p1, p2], [p2, p3]]:
-		Kit.glow_line(c, seg[0], seg[1], world.a, 6.0)
-	c.draw_circle(p1, 3.0, world.a)
-	c.draw_circle(p2, 3.0, world.a)
-	c.draw_colored_polygon(PackedVector2Array([p3 + Vector2(0, -12), p3 + Vector2(-10, 3), p3 + Vector2(10, 3)]), world.a)
-	c.draw_circle(r.position + Vector2(0.76, 0.72) * u, 6.0, world.b)
+## Marca: flecha que gira hacia arriba sobre una placa con el degradado del mundo.
+func _draw_mark(c: Control) -> void:
+	var r := Rect2(Vector2(2, 6), Vector2(68, 68))
+	Style.soft_shadow(c, r, 22.0, Color(world.a, 0.3), 10.0, Vector2(0, 6))
+	Style.gradient_shape(c, r, 22.0, world.a, world.b)
+	var o := r.position
+	var s := r.size.x / 26.0
+	c.draw_polyline(PackedVector2Array([o + Vector2(7, 20) * s, o + Vector2(7, 13) * s, o + Vector2(14, 13) * s, o + Vector2(14, 8) * s]), Color.WHITE, 3.4 * s)
+	for p in [Vector2(7, 20), Vector2(7, 13), Vector2(14, 13)]:
+		c.draw_circle(o + p * s, 1.7 * s, Color.WHITE)
+	c.draw_colored_polygon(PackedVector2Array([o + Vector2(14, 3.2) * s, o + Vector2(18.6, 8.8) * s, o + Vector2(9.4, 8.8) * s]), Color.WHITE)
+	c.draw_circle(o + Vector2(20, 20) * s, 2.5 * s, Color(1, 1, 1, 0.85))
 
 
-func _draw_hint_chip(c: Control) -> void:
-	var r := Rect2(Vector2(4, 14), Vector2(c.size.x - 8, 56))
-	Kit.card(c, r, 28, Color(1, 1, 1, 0.09), Color(1, 1, 1, 0.04), Color(1, 1, 1, 0.14), 1.5, false)
-	var b := Vector2(r.position.x + 30, r.get_center().y - 3)
-	c.draw_circle(b, 11, Palette.GOLD)
-	c.draw_rect(Rect2(b + Vector2(-5, 8), Vector2(10, 7)), Palette.GOLD)
-	Kit.text_left(c, Vector2(r.position.x + 54, r.get_center().y), str(Progress.hints()), 28, Palette.TEXT, true)
-
-
-func _draw_daily(c: Control) -> void:
-	var key := Daily.today_key()
-	var dw := Daily.world_for(key)
-	var done := Progress.daily_done(key)
-	var r := Rect2(Vector2(2, 2), c.size - Vector2(4, 12))
-	Kit.card(c, r, 32, Color(dw.top.lightened(0.18), 0.92), Color(dw.bottom.lightened(0.06), 0.92), Color(dw.a, 0.6), 2.0)
-	Kit.glow_circle(c, Vector2(r.end.x - 120, r.get_center().y), 50, dw.a, 0.08)
-	# Ilustración: tres flechas pequeñas.
-	var o := Vector2(r.end.x - 175, r.position.y + 40)
-	var arrows := [[Vector2(0, 80), Vector2(0, 30), Vector2(40, 30), Vector2(40, 0)],
-		[Vector2(70, 90), Vector2(110, 90), Vector2(110, 40)], [Vector2(150, 10), Vector2(150, 70)]]
-	for k in arrows.size():
+func _draw_thumb(c: Control, p: Dictionary) -> void:
+	var r := Rect2(Vector2.ZERO, c.size)
+	Style.fill_round(c, r, 34.0, Style.SOFT)
+	var inner := r.grow(-16)
+	var cs := minf(inner.size.x / p.w, inner.size.y / p.h)
+	var o := inner.position + (inner.size - Vector2(p.w, p.h) * cs) / 2.0
+	var wdt := maxf(1.4, cs * 0.2)
+	for a in p.arrows:
 		var pts := PackedVector2Array()
-		for q in arrows[k]:
-			pts.append(o + q)
-		var col: Color = dw.a.lerp(dw.b, k / 2.0)
-		c.draw_polyline(pts, Color(col, 0.15), 18.0, true)
-		c.draw_polyline(pts, col, 7.0, true)
-		var hp: Vector2 = pts[pts.size() - 1]
-		var d: Vector2 = (hp - pts[pts.size() - 2]).normalized()
-		var pp := Vector2(-d.y, d.x)
-		c.draw_colored_polygon(PackedVector2Array([hp + d * 14, hp - d * 4 + pp * 11, hp - d * 4 - pp * 11]), col)
-	var d0 := Time.get_date_dict_from_system()
-	var lang := Game.language()
-	var date := "%d %s" % [d0.day, MONTHS.get(lang, MONTHS.es)[d0.month - 1]]
-	Kit.text_left(c, r.position + Vector2(32, 40), tr("DAILY").to_upper(), 21, dw.a, true)
-	Kit.text_left(c, r.position + Vector2(32, 86), date, 40, Palette.TEXT, true)
-	var streak := Progress.streak(key)
-	var line_y := r.position.y + 132
-	if done:
-		var p := Vector2(r.position.x + 34, line_y)
-		c.draw_polyline(PackedVector2Array([p, p + Vector2(8, 8), p + Vector2(22, -9)]), dw.a, 4.0, true)
-		Kit.text_left(c, p + Vector2(34, 0), tr("DAILY_DONE"), 24, dw.a, true)
-	else:
-		var pill := Rect2(Vector2(r.position.x + 30, line_y - 22), Vector2(120, 44))
-		Kit.card(c, pill, 22, dw.a, dw.a.darkened(0.2), Color(0, 0, 0, 0), 0.0, false)
-		Kit.text_at(c, pill.get_center(), tr("DAILY_GO"), 24, Palette.INK, true)
-	if streak > 0:
-		var sx := r.position.x + (210.0 if not done else 230.0)
-		_star(c, Vector2(sx, line_y), 11.0, Palette.GOLD)
-		Kit.text_left(c, Vector2(sx + 18, line_y), "%s %d %s" % [tr("STREAK"), streak, tr("DAY") if streak == 1 else tr("DAYS")], 22, Palette.GOLD, true)
+		for cell in a.cells:
+			pts.append(o + (Vector2(cell) + Vector2(0.5, 0.5)) * cs)
+		c.draw_polyline(pts, Style.INK, wdt, true)
+		var hp := pts[pts.size() - 1]
+		var d := Vector2(a.dir)
+		var pr := Vector2(-d.y, d.x)
+		c.draw_colored_polygon(PackedVector2Array([hp + d * cs * 0.35, hp - d * cs * 0.1 + pr * cs * 0.28, hp - d * cs * 0.1 - pr * cs * 0.28]), Style.INK)
 
 
-func _draw_constellation() -> void:
-	var c := _constellation
-	var wi := Levels.world_index(level)
-	var in_world := (level - 1) % Levels.LEVELS_PER_WORLD
-	# Cabecera del mundo y su progreso.
-	Kit.text_at(c, Vector2(c.size.x / 2.0, 24), "%s %d · %s" % [tr("WORLD"), wi + 1, tr(world.key)], 30, Palette.TEXT, true)
-	var bar := Rect2(Vector2(c.size.x * 0.3, 52), Vector2(c.size.x * 0.4, 8))
-	c.draw_colored_polygon(Kit.rounded_points(bar, 4.0, 3), Color(1, 1, 1, 0.1))
-	var f := float(in_world) / Levels.LEVELS_PER_WORLD
-	if f > 0.0:
-		c.draw_colored_polygon(Kit.rounded_points(Rect2(bar.position, Vector2(maxf(bar.size.x * f, 8.0), 8)), 4.0, 3), world.a)
-	# Nodos: 3 superados (abajo), el actual y 3 por venir (arriba).
-	_nodes.clear()
-	var first := maxi(1, level - 3)
-	var last := first + 6
-	var top_y := 110.0
-	var bottom_y := c.size.y - 60.0
-	var step := (bottom_y - top_y) / 6.0
-	var pts := []
-	for n in range(first, last + 1):
-		var k := n - first
-		var y := bottom_y - k * step
-		var x := c.size.x / 2.0 + sin(n * 1.35) * c.size.x * 0.28
-		pts.append(Vector2(x, y))
-	for k in pts.size() - 1:
-		var n := first + k
+func _path_nodes() -> Array:
+	var out := []
+	var first := maxi(1, level - 2)
+	var w := _path.size.x
+	for k in 5:
+		out.append([first + k, Vector2(w * (0.1 + 0.2 * k), _path.size.y / 2.0)])
+	return out
+
+
+func _draw_path() -> void:
+	var c := _path
+	for nd in _path_nodes():
+		var n: int = nd[0]
+		var p: Vector2 = nd[1]
 		if n < level:
-			Kit.glow_line(c, pts[k], pts[k + 1], world.a, 3.0)
-		else:
-			_dashed(c, pts[k], pts[k + 1], Color(1, 1, 1, 0.18))
-	for k in pts.size():
-		var n := first + k
-		var p: Vector2 = pts[k]
-		var challenge := Levels.beat(n) == 2
-		if n < level:
-			var s := Progress.stars(n)
-			Kit.glow_circle(c, p, 16, world.a, 0.1)
-			c.draw_circle(p, 31, world.a.darkened(0.35))
-			c.draw_arc(p, 31, 0, TAU, 32, world.a, 3.0, true)
-			Kit.text_at(c, p, str(n), 26, Palette.TEXT, true)
-			for si in 3:
-				_star(c, p + Vector2((si - 1) * 18.0, 45), 8.0, Palette.GOLD if si < s else Color(1, 1, 1, 0.2))
-			_nodes.append([p, n, 38.0])
+			c.draw_circle(p, 40, Color(world.a, 0.13))
+			Style.text_at(c, p, str(n), 32, world.a)
 		elif n == level:
 			var pulse := 0.5 + 0.5 * sin(_clock * 3.0)
-			Kit.glow_circle(c, p, 34 + pulse * 6, world.a, 0.2)
-			c.draw_arc(p, 54 + pulse * 6, 0, TAU, 48, Color(world.a, 0.35 * (1.0 - pulse)), 3.0, true)
-			c.draw_circle(p, 50, world.a)
-			c.draw_arc(p, 50, 0, TAU, 48, Color(1, 1, 1, 0.5), 3.0, true)
-			Kit.text_at(c, p, str(n), 40, Palette.INK, true)
-			_nodes.append([p, n, 56.0])
+			for i in 6:
+				c.draw_circle(p + Vector2(0, 10), 54.0 + i * 3.0, Color(world.a, 0.035 * (1.0 + pulse * 0.5)))
+			var r := Rect2(p - Vector2(52, 52), Vector2(104, 104))
+			Style.gradient_shape(c, r, 52.0, world.a, world.b)
+			Style.text_at(c, p, str(n), 42, Color.WHITE)
 		else:
-			var col := Palette.GOLD if challenge else Color(1, 1, 1, 0.25)
-			c.draw_circle(p, 30, Color(1, 1, 1, 0.05))
-			c.draw_arc(p, 30, 0, TAU, 32, col, 2.5, true)
-			Kit.text_at(c, p, str(n), 25, Palette.MUTED if not challenge else Palette.GOLD, true)
-			if challenge:
-				_star(c, p + Vector2(0, -38), 9.0, Palette.GOLD)
+			var segs := 24
+			for i in segs:
+				if i % 2 == 0:
+					c.draw_arc(p, 39, TAU * i / segs, TAU * (i + 1) / segs, 4, Color(Style.INK, 0.18), 3.0, true)
+			Style.text_at(c, p, str(n), 32, Style.SUB)
 
 
-func _dashed(c: Control, a: Vector2, b: Vector2, col: Color) -> void:
-	var len := a.distance_to(b)
-	var d := (b - a) / len
-	var s := 0.0
-	while s < len:
-		c.draw_line(a + d * s, a + d * minf(s + 9.0, len), col, 3.0, true)
-		s += 18.0
-
-
-func _star(c: Control, center: Vector2, rad: float, col: Color) -> void:
-	var pts := PackedVector2Array()
-	for i in 10:
-		var a := -PI / 2.0 + TAU * i / 10.0
-		pts.append(center + Vector2(cos(a), sin(a)) * (rad if i % 2 == 0 else rad * 0.46))
-	c.draw_colored_polygon(pts, col)
-
-
-func _constellation_input(ev: InputEvent) -> void:
+func _path_input(ev: InputEvent) -> void:
 	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
-		for nd in _nodes:
-			if ev.position.distance_to(nd[0]) <= nd[2]:
-				Game.start_level(nd[1])
+		for nd in _path_nodes():
+			if nd[0] <= level and ev.position.distance_to(nd[1]) < 56:
+				Game.start_level(nd[0])
 				return
-
-
-# --- Ajustes ----------------------------------------------------------------------
-
-func _open_settings() -> void:
-	_settings = Control.new()
-	_settings.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_settings.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(_settings)
-	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.03, 0.06, 0.72)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_settings.add_child(dim)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_settings.add_child(center)
-	var panel := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(world.top.lightened(0.06), 0.97)
-	sb.set_corner_radius_all(36)
-	sb.set_border_width_all(2)
-	sb.border_color = Color(world.a, 0.4)
-	sb.content_margin_left = 36
-	sb.content_margin_right = 36
-	sb.content_margin_top = 30
-	sb.content_margin_bottom = 34
-	panel.add_theme_stylebox_override("panel", sb)
-	center.add_child(panel)
-	var vb := VBoxContainer.new()
-	vb.custom_minimum_size = Vector2(560, 0)
-	vb.add_theme_constant_override("separation", 18)
-	panel.add_child(vb)
-	vb.add_child(Kit.label(tr("SETTINGS"), 44, Palette.TEXT, HORIZONTAL_ALIGNMENT_CENTER, true))
-	_setting_row(vb, tr("SOUND"), "sound")
-	_setting_row(vb, tr("VIBRATION"), "vibration")
-	var row := HBoxContainer.new()
-	vb.add_child(row)
-	var l := Kit.label(tr("LANGUAGE"), 30, Palette.TEXT, HORIZONTAL_ALIGNMENT_LEFT)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(l)
-	var lang := Kit.button(tr("LANG_NAME"), world.a, 28)
-	lang.custom_minimum_size = Vector2(200, 80)
-	lang.pressed.connect(func():
-		Game.set_language("ca" if Game.language() == "es" else "es")
-		get_tree().reload_current_scene())
-	row.add_child(lang)
-	var close := Kit.button(tr("CLOSE"), world.a, 30, true)
-	close.pressed.connect(_close_settings)
-	vb.add_child(close)
-	Kit.fade_in(_settings, 0.18)
-
-
-func _setting_row(vb: VBoxContainer, label_text: String, key: String) -> void:
-	var row := HBoxContainer.new()
-	vb.add_child(row)
-	var l := Kit.label(label_text, 30, Palette.TEXT, HORIZONTAL_ALIGNMENT_LEFT)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(l)
-	var on: bool = Progress.setting(key)
-	var b := Kit.button(tr("ON") if on else tr("OFF"), world.a, 28)
-	b.custom_minimum_size = Vector2(200, 80)
-	b.apply_style(on)
-	b.pressed.connect(func():
-		var v: bool = not Progress.setting(key)
-		Progress.set_setting(key, v)
-		b.text = tr("ON") if v else tr("OFF")
-		b.apply_style(v)
-		Sfx.play("tap"))
-	row.add_child(b)
-
-
-func _close_settings() -> void:
-	if _settings:
-		_settings.queue_free()
-		_settings = null

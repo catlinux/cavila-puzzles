@@ -48,7 +48,7 @@ func _run() -> void:
 	var home = await _spawn("res://ui/home.tscn")
 	home._open_settings()
 	await _frames(2)
-	home._close_settings()
+	home._settings.queue_free()
 	home.queue_free()
 	await _frames(1)
 
