@@ -13,6 +13,14 @@ const VIOLET := Color8(167, 139, 250)
 const TEXT := Color8(233, 240, 244)
 const MUTED := Color8(139, 152, 168)
 const WIRE := Color8(94, 110, 130)
+const INK := Color8(9, 14, 20)
+const BG_TOP := Color8(24, 33, 46)
+const BG_BOTTOM := Color8(9, 12, 18)
+const CARD_TOP := Color8(38, 49, 64)
+const CARD_BOTTOM := Color8(25, 32, 43)
+const CARD_BORDER := Color8(62, 77, 98)
+const TURQUOISE_LIGHT := Color8(120, 243, 224)
+const CORAL_LIGHT := Color8(255, 160, 146)
 
 const GROUP_COLORS := [CORAL, GOLD, VIOLET]
 const PIECE_COLORS := [
