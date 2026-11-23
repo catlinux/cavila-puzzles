@@ -71,8 +71,8 @@ func run() -> void:
 		var cov := 0
 		for a in g.arrows:
 			cov += a.cells.size()
-			check(a.cells.size() <= par.max_len, "longitud máxima " + tag)
-		check(float(cov) / (g.w * g.h) >= 0.45, "tablero bien lleno " + tag + " (%.2f)" % (float(cov) / (g.w * g.h)))
+			check(a.cells.size() <= int(par.max_len * 1.4), "longitud máxima " + tag)
+		check(float(cov) / (g.w * g.h) >= (0.6 if lv < 10 else 0.85), "tablero bien lleno " + tag + " (%.2f)" % (float(cov) / (g.w * g.h)))
 		# Reproducir la solución tocando flechas una a una.
 		var removed := {}
 		var all_ok := true
@@ -97,7 +97,7 @@ func run() -> void:
 		avg_lo += Levels.difficulty(11 + k)
 		avg_hi += Levels.difficulty(500 + k)
 	check(avg_hi > avg_lo, "la dificultad crece")
-	check(Levels.params_for(100000).w <= 16 and Levels.params_for(100000).h <= 24, "tamaño máximo acotado (móvil)")
+	check(Levels.params_for(100000).w <= 24 and Levels.params_for(100000).h <= 36, "tamaño máximo acotado (móvil)")
 	check(Levels.beat(10) == 2 and Levels.beat(11) == 0 and Levels.beat(12) == 1, "ritmo de 10 niveles")
 	check(Levels.world_index(1) == 0 and Levels.world_index(30) == 0 and Levels.world_index(31) == 1, "mundos de 30")
 	# Profundidad media creciente.
@@ -107,3 +107,9 @@ func run() -> void:
 		d_lo += Arrows.generate(Levels.seed_for(3 + k), Levels.params_for(3 + k)).depth
 		d_hi += Arrows.generate(Levels.seed_for(900 + k), Levels.params_for(900 + k)).depth
 	check(d_hi > d_lo, "más dependencias en niveles altos (%d vs %d)" % [d_lo, d_hi])
+	# Niveles altos: pocas flechas libres al empezar; primeros niveles: muchas.
+	var hi := Arrows.solve(Arrows.generate(Levels.seed_for(700), Levels.params_for(700)))
+	var g700 := Arrows.generate(Levels.seed_for(700), Levels.params_for(700))
+	check(float(hi.free0) / g700.arrows.size() < 0.2, "nivel 700: pocas libres al empezar")
+	var g1 := Arrows.generate(Levels.seed_for(1), Levels.params_for(1))
+	check(float(Arrows.solve(g1).free0) / g1.arrows.size() > 0.3, "nivel 1: muchas libres al empezar")

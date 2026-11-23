@@ -2,7 +2,7 @@ extends RefCounted
 ## Curva de dificultad de los niveles (ilimitados) y mundos.
 ##
 ## La dificultad crece de forma logarítmica: muy rápida al principio (aprender) y cada vez
-## más suave, hasta estabilizarse hacia el nivel 2000; más allá, cada nivel sigue siendo
+## más suave, hasta estabilizarse hacia el nivel 3000; más allá, cada nivel sigue siendo
 ## distinto por su semilla. Dentro de cada bloque de 10 hay ritmo: respiros y un nivel reto.
 
 const Rng = preload("res://core/rng.gd")
@@ -40,7 +40,7 @@ static func beat(level: int) -> int:
 
 static func difficulty(level: int) -> float:
 	var n := maxi(level, 1)
-	var t := clampf(pow(log(float(n)) / log(2000.0), 1.25), 0.0, 1.0)
+	var t := clampf(pow(log(float(n)) / log(3000.0), 1.3), 0.0, 1.0)
 	match beat(n):
 		0:
 			t -= 0.07
@@ -54,18 +54,25 @@ static func params_for(level: int) -> Dictionary:
 
 
 static func params_from(t: float) -> Dictionary:
-	var w := int(round(lerpf(4.0, 16.0, t)))
-	var h := mini(int(round(w * 1.5)), 24)
+	var w := int(round(lerpf(5.0, 24.0, t)))
+	var h := mini(int(round(w * 1.5)), 36)
 	return {
 		"w": w, "h": h,
 		"min_len": 2,
-		"max_len": int(round(lerpf(3.0, 9.0, t))),
-		"turn": lerpf(0.2, 0.5, t),
-		"coverage": lerpf(0.62, 0.92, t),
-		"long_bias": lerpf(0.3, 0.85, t),
-		"chain_bias": lerpf(0.2, 0.75, t),
-		"target_depth": int(round(lerpf(2.0, 22.0, t))),
-		"candidates": 4,
+		"max_len": int(round(lerpf(4.0, 26.0, t))),
+		"long_ratio": lerpf(0.1, 0.4, t),
+		"turn": lerpf(0.25, 0.5, t),
+		"coverage": lerpf(0.75, 0.97, t),
+		# Al principio pocas dependencias (muchas flechas salen a la primera); después,
+		# flechas que apuntan a otras y casi ninguna libre al empezar.
+		"long_bias": lerpf(0.0, 0.9, smoothstep(0.0, 0.6, t)),
+		"chain_bias": lerpf(0.0, 0.85, smoothstep(0.0, 0.6, t)),
+		"target_free": lerpf(0.5, 0.07, smoothstep(0.0, 0.7, t)),
+		"target_depth": int(round(lerpf(3.0, 60.0, t))),
+		# Relleno de huecos y alargado de colas: apenas en los primeros niveles.
+		"fill_pass": lerpf(0.0, 4.0, smoothstep(0.05, 0.4, t)),
+		"extend_rounds": int(round(lerpf(0.0, 4.0, smoothstep(0.05, 0.4, t)))),
+		"candidates": 3,
 	}
 
 

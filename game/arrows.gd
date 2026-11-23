@@ -76,24 +76,50 @@ static func free_arrows(p: Dictionary, removed: Dictionary) -> Array:
 
 
 ## Solucionador voraz por capas. layers = profundidad de dependencias (medida de dificultad);
-## min_free = mínimo de flechas libres a la vez (menos opciones = más difícil).
+## min_free = mínimo de flechas libres a la vez; free0 = libres al empezar.
+## Incremental: al quitar una flecha solo se revisan las que estaban esperando a esa.
 static func solve(p: Dictionary, removed_in: Dictionary = {}) -> Dictionary:
 	var removed := removed_in.duplicate()
+	var occ := occupancy(p, removed)
+	var n: int = p.arrows.size()
+	var waiting := {}  # bloqueadora -> [flechas que esperan]
+	var layer := []
+	for i in n:
+		if removed.has(i):
+			continue
+		var by: int = blocker(p, i, occ).by
+		if by == -1:
+			layer.append(i)
+		else:
+			if not waiting.has(by):
+				waiting[by] = []
+			waiting[by].append(i)
+	var free0 := layer.size()
 	var order := []
 	var layers := 0
 	var min_free := 1 << 30
-	var remaining: int = p.arrows.size() - removed.size()
-	while remaining > 0:
-		var free := free_arrows(p, removed)
-		if free.is_empty():
-			return {"solvable": false, "order": order, "layers": layers, "min_free": 0}
+	while not layer.is_empty():
 		layers += 1
-		min_free = mini(min_free, free.size())
-		for i in free:
-			removed[i] = true
-			order.append(i)
-		remaining -= free.size()
-	return {"solvable": true, "order": order, "layers": layers, "min_free": min_free if layers > 0 else 0}
+		min_free = mini(min_free, layer.size())
+		var next := []
+		for x in layer:
+			order.append(x)
+			removed[x] = true
+			for c in p.arrows[x].cells:
+				occ[c.y * p.w + c.x] = -1
+		for x in layer:
+			for i in waiting.get(x, []):
+				var by: int = blocker(p, i, occ).by
+				if by == -1:
+					next.append(i)
+				else:
+					if not waiting.has(by):
+						waiting[by] = []
+					waiting[by].append(i)
+		layer = next
+	var ok := order.size() == n - removed_in.size()
+	return {"solvable": ok, "order": order, "layers": layers,
+		"min_free": min_free if layers > 0 else 0, "free0": free0}
 
 
 ## Comprobación estructural de un puzle. {ok, reason}.
@@ -139,8 +165,10 @@ static func generate(seed_value: int, params: Dictionary) -> Dictionary:
 		var cov := 0
 		for a in p.arrows:
 			cov += a.cells.size()
-		var score: float = absf(s.layers - params.get("target_depth", 3)) * 10.0 \
-			- float(cov) / (p.w * p.h) * 5.0
+		var free_frac: float = float(s.free0) / p.arrows.size()
+		var score: float = absf(s.layers - params.get("target_depth", 3)) * 2.0 \
+			+ absf(free_frac - params.get("target_free", 0.1)) * 60.0 \
+			- float(cov) / (p.w * p.h) * 20.0
 		if score < best_score:
 			best_score = score
 			best = p
@@ -152,76 +180,159 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 	var w: int = params.w
 	var h: int = params.h
 	var p := {"w": w, "h": h, "arrows": []}
-	var occ := PackedInt32Array()
-	occ.resize(w * h)
-	occ.fill(-1)
+	# Estado del constructor:
+	#   occ      casilla -> flecha
+	#   rays_at  casilla -> flechas cuyo camino de salida pasa por ella
+	#   waits    flecha -> {flechas que tiene delante y debe esperar}
+	#   free     flechas sin nada delante (saldrían al primer toque)
+	#   hot      casilla -> nº de flechas libres cuyo camino pasa por ella
+	var st := {"w": w, "h": h, "occ": PackedInt32Array(), "rays_at": [], "waits": [], "free": {},
+		"hot": PackedInt32Array(), "ray_cells": []}
+	st.occ.resize(w * h)
+	st.occ.fill(-1)
+	st.hot.resize(w * h)
+	for i in w * h:
+		st.rays_at.append([])
 	var filled := 0
 	var target := int(params.coverage * w * h)
 	var long_bias: float = params.get("long_bias", 0.6)
 	var chain_bias: float = params.get("chain_bias", 0.5)
-	# Fase 1: flechas de longitud normal. Fase 2: relleno de huecos con flechas cortas.
 	for phase in 2:
-		var max_len: int = params.max_len if phase == 0 else mini(3, params.max_len)
-		var tries := w * h * (10 if phase == 0 else 6)
+		var max_len: int = params.max_len if phase == 0 else mini(5, params.max_len)
+		var tries := w * h * 6 if phase == 0 else int(w * h * params.get("fill_pass", 4.0))
 		for _t in tries:
 			if phase == 0 and filled >= target:
 				break
 			var hd := Vector2i(rng.randi() % w, rng.randi() % h)
-			# Encadenar: poner la cabeza en el camino de salida de una flecha reciente, que
-			# tendrá que esperar a esta. Así se forman cadenas largas de dependencias.
-			if phase == 0 and not p.arrows.is_empty() and rng.randf() < chain_bias:
-				var r: int = p.arrows.size() - 1 - rng.randi() % mini(3, p.arrows.size())
-				var ra: Dictionary = p.arrows[r]
-				var free_ray := []
-				var rc: Vector2i = ra.cells[ra.cells.size() - 1] + ra.dir
-				while rc.x >= 0 and rc.y >= 0 and rc.x < w and rc.y < h:
-					if occ[rc.y * w + rc.x] == -1:
-						free_ray.append(rc)
-					rc += ra.dir
-				if not free_ray.is_empty():
-					hd = free_ray[rng.randi() % free_ray.size()]
-			if occ[hd.y * w + hd.x] != -1:
+			if phase == 0 and not st.free.is_empty() and rng.randf() < chain_bias:
+				var fk: Array = st.free.keys()
+				var j: int = fk[rng.randi() % fk.size()]
+				var cand := []
+				for k in st.ray_cells[j]:
+					if st.occ[k] == -1:
+						cand.append(Vector2i(k % w, k / w))
+				if not cand.is_empty():
+					hd = cand[rng.randi() % cand.size()]
+			if st.occ[hd.y * w + hd.x] != -1:
 				continue
-			# Direcciones con salida libre y su longitud de recorrido.
+			# Direcciones posibles y cuántas flechas tendría delante cada una.
 			var opts := []
 			for d in DIRS:
 				var b: Vector2i = hd - d
-				if b.x < 0 or b.y < 0 or b.x >= w or b.y >= h or occ[b.y * w + b.x] != -1:
+				if b.x < 0 or b.y < 0 or b.x >= w or b.y >= h or st.occ[b.y * w + b.x] != -1:
 					continue
+				var ahead := {}
 				var c: Vector2i = hd + d
-				var n := 0
-				var ok := true
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
-					if occ[c.y * w + c.x] != -1:
-						ok = false
-						break
-					n += 1
+					var o: int = st.occ[c.y * w + c.x]
+					if o != -1:
+						ahead[o] = true
 					c += d
-				if ok:
-					opts.append([d, n])
+				opts.append([d, ahead.size()])
 			if opts.is_empty():
 				continue
 			var d: Vector2i
 			if rng.randf() < long_bias:
-				# La que cruza más tablero: así las flechas siguientes la taparán (dependencias).
+				# Apuntar hacia otras flechas: más dependencias, menos flechas "regaladas".
 				opts.sort_custom(func(x, y): return x[1] > y[1])
 				d = opts[0][0]
 			else:
 				d = opts[rng.randi() % opts.size()][0]
-			var arrow := _grow(rng, occ, w, h, hd, d, rng.randi_range(params.min_len, max_len), params.turn)
-			if arrow.size() < params.min_len:
+			var body := _grow(rng, st, hd, d, _pick_len(rng, params, max_len), params.turn, chain_bias)
+			body = _trim_cycles(p, st, body, d, params.min_len)
+			if body.size() < params.min_len:
 				continue
-			var idx: int = p.arrows.size()
-			for cc in arrow:
-				occ[cc.y * w + cc.x] = idx
-			p.arrows.append({"cells": arrow, "dir": d})
-			filled += arrow.size()
+			_commit(p, st, body, d)
+			filled += body.size()
+	_extend_tails(rng, p, st, params, chain_bias)
 	return p
 
 
-## Hace crecer el cuerpo hacia atrás desde la cabeza. Devuelve las casillas cola..cabeza.
-static func _grow(rng: RandomNumberGenerator, occ: PackedInt32Array, w: int, h: int,
-		hd: Vector2i, d: Vector2i, want: int, turn: float) -> Array:
+static func _ray_cells(w: int, h: int, hd: Vector2i, d: Vector2i) -> Array:
+	var out := []
+	var c := hd + d
+	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+		out.append(c.y * w + c.x)
+		c += d
+	return out
+
+
+## ¿Se puede llegar desde alguna flecha de `from` a alguna de `targets` siguiendo esperas?
+static func _reaches(st: Dictionary, from: Dictionary, targets: Dictionary) -> bool:
+	var seen := {}
+	var stack: Array = from.keys()
+	while not stack.is_empty():
+		var x: int = stack.pop_back()
+		if targets.has(x):
+			return true
+		if seen.has(x):
+			continue
+		seen[x] = true
+		for y in st.waits[x]:
+			if not seen.has(y):
+				stack.append(y)
+	return false
+
+
+## Recorta la cola de una flecha candidata hasta que no cree un ciclo de esperas
+## (A espera a B y B espera a A), que haría el tablero irresoluble.
+static func _trim_cycles(p: Dictionary, st: Dictionary, body: Array, d: Vector2i, min_len: int) -> Array:
+	var w: int = st.w
+	var ahead := {}  # flechas que la nueva tendría delante (las espera)
+	for k in _ray_cells(w, st.h, body[body.size() - 1], d):
+		if st.occ[k] != -1:
+			ahead[st.occ[k]] = true
+	while body.size() >= min_len:
+		var behind := {}  # flechas que pasarían a esperar a la nueva
+		for c in body:
+			for j in st.rays_at[c.y * w + c.x]:
+				behind[j] = true
+		if ahead.is_empty() or behind.is_empty() or not _reaches(st, ahead, behind):
+			return body
+		body.pop_front()
+	return []
+
+
+static func _commit(p: Dictionary, st: Dictionary, body: Array, d: Vector2i) -> void:
+	var w: int = st.w
+	var idx: int = p.arrows.size()
+	p.arrows.append({"cells": body, "dir": d})
+	st.waits.append({})
+	var ray := _ray_cells(w, st.h, body[body.size() - 1], d)
+	for k in ray:
+		if st.occ[k] != -1:
+			st.waits[idx][st.occ[k]] = true
+	for c in body:
+		_occupy(st, c, idx)
+	st.ray_cells.append(ray)
+	for k in ray:
+		st.rays_at[k].append(idx)
+	if st.waits[idx].is_empty():
+		st.free[idx] = true
+		for k in ray:
+			st.hot[k] += 1
+
+
+## Ocupa una casilla con la flecha idx: quien tenga ahí su camino de salida pasa a esperarla.
+static func _occupy(st: Dictionary, c: Vector2i, idx: int) -> void:
+	var k: int = c.y * st.w + c.x
+	st.occ[k] = idx
+	for j in st.rays_at[k]:
+		if j == idx:
+			continue
+		st.waits[j][idx] = true
+		if st.free.has(j):
+			st.free.erase(j)
+			for rk in st.ray_cells[j]:
+				st.hot[rk] -= 1
+
+
+## Hace crecer el cuerpo hacia atrás desde la cabeza (devuelve cola..cabeza). Con
+## probabilidad chain_bias prefiere pasar por caminos de flechas libres para taparlas.
+static func _grow(rng: RandomNumberGenerator, st: Dictionary, hd: Vector2i, d: Vector2i,
+		want: int, turn: float, chain_bias: float) -> Array:
+	var w: int = st.w
+	var h: int = st.h
 	var ray := {}
 	var c := hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
@@ -236,20 +347,90 @@ static func _grow(rng: RandomNumberGenerator, occ: PackedInt32Array, w: int, h: 
 		var perp := [Vector2i(step.y, step.x), Vector2i(-step.y, -step.x)]
 		Rng.shuffle(perp, rng)
 		var opts := [perp[0], perp[1], step] if rng.randf() < turn else [step, perp[0], perp[1]]
-		var moved := false
+		var valid := []
 		for s in opts:
 			var n: Vector2i = cur - s
 			if n.x < 0 or n.y < 0 or n.x >= w or n.y >= h:
 				continue
-			if occ[n.y * w + n.x] != -1 or used.has(n) or ray.has(n):
+			if st.occ[n.y * w + n.x] != -1 or used.has(n) or ray.has(n):
 				continue
-			body.append(n)
-			used[n] = true
-			cur = n
-			step = s
-			moved = true
+			valid.append(s)
+		if valid.is_empty():
 			break
-		if not moved:
-			break
+		var pick: Vector2i = valid[0]
+		if rng.randf() < chain_bias:
+			for s in valid:
+				var n2: Vector2i = cur - s
+				if st.hot[n2.y * w + n2.x] > 0:
+					pick = s
+					break
+		var nn: Vector2i = cur - pick
+		body.append(nn)
+		used[nn] = true
+		cur = nn
+		step = pick
 	body.reverse()
 	return body
+
+
+## Largo de una flecha: corta, media o larga según las proporciones del nivel.
+static func _pick_len(rng: RandomNumberGenerator, params: Dictionary, max_len: int) -> int:
+	var lo: int = params.min_len
+	var mid := maxi(lo + 1, max_len / 3)
+	var r := rng.randf()
+	if r < params.get("long_ratio", 0.15):
+		return rng.randi_range(maxi(mid, max_len / 2), max_len)
+	if r < params.get("long_ratio", 0.15) + 0.45:
+		return rng.randi_range(mini(lo + 2, mid), mid)
+	return rng.randi_range(lo, mini(lo + 2, max_len))
+
+
+## Alarga colas hacia las casillas vacías para llenar el tablero, sin crear ciclos de espera.
+## Prefiere casillas que tapan caminos de flechas libres.
+static func _extend_tails(rng: RandomNumberGenerator, p: Dictionary, st: Dictionary, params: Dictionary, chain_bias: float) -> void:
+	var w: int = p.w
+	var h: int = p.h
+	var cap: int = int(params.max_len * 1.4)
+	var order := range(p.arrows.size())
+	for _round in params.get("extend_rounds", 4):
+		Rng.shuffle(order, rng)
+		var grew := false
+		for k in order:
+			var a: Dictionary = p.arrows[k]
+			var own := {}
+			for rk in st.ray_cells[k]:
+				own[rk] = true
+			var me := {k: true}
+			while a.cells.size() < cap:
+				var tail: Vector2i = a.cells[0]
+				var opts := DIRS.duplicate()
+				Rng.shuffle(opts, rng)
+				var valid := []
+				for d in opts:
+					var n: Vector2i = tail + d
+					if n.x < 0 or n.y < 0 or n.x >= w or n.y >= h:
+						continue
+					var idx := n.y * w + n.x
+					if st.occ[idx] != -1 or own.has(idx):
+						continue
+					# Quien tenga su salida por aquí pasaría a esperar a k: no debe esperarle k.
+					var behind := {}
+					for j in st.rays_at[idx]:
+						if j != k:
+							behind[j] = true
+					if not behind.is_empty() and _reaches(st, me, behind):
+						continue
+					valid.append(n)
+				if valid.is_empty():
+					break
+				var pick: Vector2i = valid[0]
+				if rng.randf() < chain_bias:
+					for n in valid:
+						if st.hot[n.y * w + n.x] > 0:
+							pick = n
+							break
+				a.cells.insert(0, pick)
+				_occupy(st, pick, k)
+				grew = true
+		if not grew:
+			break
