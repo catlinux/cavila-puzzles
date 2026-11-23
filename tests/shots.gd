@@ -17,8 +17,8 @@ func _ready() -> void:
 			Game.begin(pid, diff, 3)
 			var Registry = load("res://core/registry.gd")
 			var v = await _shot(Registry.get_entry(pid).scene, "%s/%s_%d.png" % [out, pid, diff], 0.9, true)
-	Game.last_result = {"won": true, "time": 83.0, "lives": 2, "hints": 1}
-	await _shot("res://ui/victory.tscn", out + "/victoria.png")
+	Game.last_result = {"won": true, "time": 83.0, "lives": 2, "hints": 1, "stars": 2}
+	await _shot("res://ui/victory.tscn", out + "/victoria.png", 1.6)
 	get_tree().quit()
 
 

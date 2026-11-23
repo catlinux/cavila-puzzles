@@ -48,7 +48,7 @@ func _process(delta: float) -> void:
 
 func _layout() -> void:
 	var s := content.size
-	var board_h := s.y * 0.5
+	var board_h := s.y * 0.54
 	cs = minf(minf((s.x - 32.0) / w, (board_h - 16.0) / h), 96.0)
 	origin = Vector2((s.x - cs * w) / 2.0, (board_h - cs * h) / 2.0)
 	var top := board_h + 8.0
@@ -213,11 +213,36 @@ func _give_hint() -> bool:
 
 # --- Dibujo -----------------------------------------------------------------------
 
-func _draw_piece(c: Control, cells: Array, top_left: Vector2, size: float, col: Color, alpha := 1.0) -> void:
+## Pieza con relieve: degradado por casilla, contorno exterior y brillo en los bordes libres.
+func _draw_piece(c: Control, cells: Array, top_left: Vector2, size: float, col: Color, alpha := 1.0, shadow := false) -> void:
+	var set := {}
 	for q in cells:
-		var r := Rect2(top_left + Vector2(q) * size, Vector2(size, size)).grow(-2.0)
-		c.draw_rect(r, Color(col, alpha))
-		c.draw_rect(r, Color(col.lightened(0.35), alpha), false, 2.0)
+		set[Vector2i(q)] = true
+	if shadow:
+		for q in cells:
+			var sr := Rect2(top_left + Vector2(q) * size + Vector2(5, 11), Vector2(size, size))
+			c.draw_rect(sr, Color(0, 0, 0, 0.28))
+	var top_c := Color(col.lightened(0.2), alpha)
+	var bot_c := Color(col.darkened(0.15), alpha)
+	for q in cells:
+		var r := Rect2(top_left + Vector2(q) * size, Vector2(size, size))
+		c.draw_polygon(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]),
+			PackedColorArray([top_c, top_c, bot_c, bot_c]))
+	var edge := Color(col.darkened(0.55), alpha)
+	var hi := Color(1, 1, 1, 0.38 * alpha)
+	for q in cells:
+		var v: Vector2i = q
+		var r := Rect2(top_left + Vector2(v) * size, Vector2(size, size))
+		if not set.has(v + Vector2i(0, -1)):
+			c.draw_line(r.position, Vector2(r.end.x, r.position.y), edge, 3.0)
+			c.draw_line(r.position + Vector2(5, 5), Vector2(r.end.x - 5, r.position.y + 5), hi, 2.0, true)
+		if not set.has(v + Vector2i(0, 1)):
+			c.draw_line(Vector2(r.position.x, r.end.y), r.end, edge, 3.0)
+		if not set.has(v + Vector2i(-1, 0)):
+			c.draw_line(r.position, Vector2(r.position.x, r.end.y), edge, 3.0)
+			c.draw_line(r.position + Vector2(5, 5), Vector2(r.position.x + 5, r.end.y - 5), hi, 2.0, true)
+		if not set.has(v + Vector2i(1, 0)):
+			c.draw_line(Vector2(r.end.x, r.position.y), r.end, edge, 3.0)
 
 
 func _draw_board() -> void:
@@ -225,31 +250,44 @@ func _draw_board() -> void:
 		return
 	var c := content
 	_layout()
+	# Silueta: huecos hundidos.
 	for i in w * h:
 		if puzzle.cells[i]:
 			var r := Rect2(origin + Vector2(i % w, i / w) * cs, Vector2(cs, cs)).grow(-1.5)
-			c.draw_rect(r, Palette.PANEL_HI.lightened(0.12))
+			var pts := Kit.rounded_points(r, cs * 0.12, 4)
+			c.draw_colored_polygon(pts, Color8(12, 17, 25))
+			var line := pts.duplicate()
+			line.append(pts[0])
+			c.draw_polyline(line, Color8(54, 69, 90), 2.0, true)
 	for i in pieces.size():
 		if pieces[i].placed:
 			_draw_piece(c, pieces[i].cells, origin + Vector2(pieces[i].origin) * cs, cs, pieces[i].color)
 	if not hint.is_empty():
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 120.0)
 		for q in hint.cells:
-			c.draw_rect(Rect2(origin + Vector2(q) * cs, Vector2(cs, cs)).grow(-2.0), Color(Palette.GOLD, 0.25 + 0.3 * pulse))
-			c.draw_rect(Rect2(origin + Vector2(q) * cs, Vector2(cs, cs)).grow(-2.0), Palette.GOLD, false, 3.0)
+			var gr := Rect2(origin + Vector2(q) * cs, Vector2(cs, cs)).grow(-3.0)
+			c.draw_rect(gr, Color(Palette.GOLD, 0.18 + 0.25 * pulse))
+			c.draw_rect(gr, Palette.GOLD, false, 3.0)
 	# Bandeja.
 	var sep := origin.y * 2.0 + cs * h + 4.0
-	c.draw_line(Vector2(16, sep), Vector2(c.size.x - 16, sep), Palette.PANEL_HI, 3.0)
+	var tray := Rect2(Vector2(10, sep + 4), Vector2(c.size.x - 20, c.size.y - sep - 16))
+	Kit.card(c, tray, 24, Color8(16, 22, 31), Color8(13, 18, 26), Color8(45, 58, 77), 1.5, false)
 	for i in pieces.size():
 		if pieces[i].placed or i == drag:
 			continue
 		_draw_piece(c, pieces[i].cells, pieces[i].pos, tcs, pieces[i].color)
 		if not hint.is_empty() and hint.piece == i:
-			c.draw_rect(_piece_rect(i), Palette.GOLD, false, 3.0)
-	# Pieza arrastrada con vista previa del encaje.
+			var hr := _piece_rect(i)
+			var hp := Kit.rounded_points(hr, 12.0, 4)
+			hp.append(hp[0])
+			c.draw_polyline(hp, Palette.GOLD, 3.0, true)
+	# Pieza arrastrada con vista previa del encaje y sombra.
 	if drag >= 0:
 		var o := _snap_origin()
 		if moved and _fits(drag, o):
-			_draw_piece(c, pieces[drag].cells, origin + Vector2(o) * cs, cs, Palette.TURQUOISE, 0.3)
+			for q in pieces[drag].cells:
+				var pr := Rect2(origin + Vector2(Vector2i(q) + o) * cs, Vector2(cs, cs)).grow(-2.0)
+				c.draw_rect(pr, Color(Palette.TURQUOISE, 0.22))
+				c.draw_rect(pr, Palette.TURQUOISE, false, 3.0)
 		var tl := drag_pos - drag_off - Vector2(0, cs * 0.8)
-		_draw_piece(c, pieces[drag].cells, tl, cs, pieces[drag].color, 0.9)
+		_draw_piece(c, pieces[drag].cells, tl, cs, pieces[drag].color, 0.95, true)

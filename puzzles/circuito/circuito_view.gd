@@ -26,11 +26,10 @@ func _setup() -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
-	if hint_node >= 0:
-		if Time.get_ticks_msec() > hint_until:
-			hint_node = -1
-		if _playing:
-			content.queue_redraw()
+	if hint_node >= 0 and Time.get_ticks_msec() > hint_until:
+		hint_node = -1
+	if _playing and not finished:
+		content.queue_redraw()
 
 
 # --- Geometría --------------------------------------------------------------------
@@ -136,52 +135,73 @@ func _draw_board() -> void:
 		return
 	var c := content
 	_layout()
+	var t := Time.get_ticks_msec() / 1000.0
+	# Cables y diodos (con contorno oscuro para dar relieve).
 	for ei in puzzle.edges.size():
 		var e: Dictionary = puzzle.edges[ei]
 		var pa := _np(e.a)
 		var pb := _np(e.b)
+		c.draw_line(pa, pb, Color8(12, 17, 24), 14.0, true)
 		if e.kind == 0:
 			c.draw_line(pa, pb, Palette.WIRE, 8.0, true)
+			c.draw_line(pa, pb, Color(1, 1, 1, 0.12), 2.0, true)
 			continue
-		var col: Color = Palette.WIRE.lightened(0.25) if e.grp < 0 else Palette.GROUP_COLORS[e.grp]
-		c.draw_line(pa, pb, col.darkened(0.45), 6.0, true)
+		var col: Color = Palette.WIRE.lightened(0.3) if e.grp < 0 else Palette.GROUP_COLORS[e.grp]
+		c.draw_line(pa, pb, col.darkened(0.5), 8.0, true)
 		var ft: Array = logic.effective_dir(puzzle, ei, mask)
 		var f := _np(ft[0])
-		var t := _np(ft[1])
-		var mid := (f + t) / 2.0
-		var dir := (t - f).normalized()
+		var to := _np(ft[1])
+		var mid := (f + to) / 2.0
+		var dir := (to - f).normalized()
 		var perp := Vector2(-dir.y, dir.x)
-		c.draw_colored_polygon(PackedVector2Array([mid + dir * 17, mid - dir * 13 + perp * 15, mid - dir * 13 - perp * 15]), col)
+		var tri := PackedVector2Array([mid + dir * 19, mid - dir * 14 + perp * 17, mid - dir * 14 - perp * 17])
+		var outline := tri.duplicate()
+		outline.append(tri[0])
+		c.draw_colored_polygon(tri, col)
+		c.draw_polyline(outline, Color8(12, 17, 24), 3.0, true)
 		if e.grp >= 0:
-			Kit.text_at(c, mid + perp * 28, str(e.grp + 1), 20, col)
+			Kit.text_at(c, mid + perp * 31, str(e.grp + 1), 20, col, true)
 
+	# Camino recorrido con brillo.
 	for i in path.size() - 1:
-		c.draw_line(_np(path[i]), _np(path[i + 1]), Palette.TURQUOISE, 14.0, true)
+		Kit.glow_line(c, _np(path[i]), _np(path[i + 1]), Palette.TURQUOISE, 9.0)
+		c.draw_line(_np(path[i]), _np(path[i + 1]), Palette.TURQUOISE_LIGHT, 3.0, true)
 
+	# Nodos e interruptores.
 	for i in w * h:
 		var p := _np(i)
 		var sw: int = puzzle.switches[i]
 		if sw >= 0:
 			var col2: Color = Palette.GROUP_COLORS[sw]
-			c.draw_rect(Rect2(p - Vector2(22, 22), Vector2(44, 44)), col2)
-			c.draw_rect(Rect2(p - Vector2(22, 22), Vector2(44, 44)), Palette.BG, false, 3.0)
-			Kit.text_at(c, p, str(sw + 1), 28, Palette.BG)
+			var r := Rect2(p - Vector2(25, 25), Vector2(50, 50))
+			Kit.glow_circle(c, p, 16, col2, 0.07)
+			Kit.card(c, r, 12, col2.lightened(0.25), col2.darkened(0.15), Color8(12, 17, 24), 3.0, false)
+			Kit.text_at(c, p + Vector2(0, 1), str(sw + 1), 30, Palette.INK, true)
 		else:
-			c.draw_circle(p, 15, Palette.TURQUOISE if path.has(i) else Palette.PANEL_HI)
-			c.draw_arc(p, 15, 0, TAU, 24, Palette.WIRE, 3.0, true)
-	# Entrada (triángulo) y salida (diana).
+			var on := path.has(i)
+			c.draw_circle(p, 19, Color8(12, 17, 24))
+			c.draw_circle(p, 15, Palette.TURQUOISE if on else Palette.PANEL_HI.lightened(0.1))
+			c.draw_circle(p + Vector2(-4, -4), 5, Color(1, 1, 1, 0.35 if on else 0.15))
+
+	# Entrada: anillo con triángulo. Salida: diana con arcos giratorios.
 	var sp := _np(puzzle.start)
-	c.draw_arc(sp, 30, 0, TAU, 32, Palette.TURQUOISE, 5.0, true)
-	c.draw_colored_polygon(PackedVector2Array([sp + Vector2(9, 0), sp + Vector2(-6, -10), sp + Vector2(-6, 10)]), Palette.TURQUOISE)
+	Kit.glow_circle(c, sp, 22, Palette.TURQUOISE, 0.09)
+	c.draw_arc(sp, 31, 0, TAU, 40, Palette.TURQUOISE, 5.0, true)
+	c.draw_colored_polygon(PackedVector2Array([sp + Vector2(10, 0), sp + Vector2(-7, -11), sp + Vector2(-7, 11)]), Palette.TURQUOISE)
 	var xp := _np(puzzle.exit)
-	c.draw_arc(xp, 32, 0, TAU, 32, Palette.CORAL, 5.0, true)
-	c.draw_arc(xp, 19, 0, TAU, 32, Palette.CORAL, 5.0, true)
-	c.draw_circle(xp, 8, Palette.CORAL)
-	# Chispa.
+	Kit.glow_circle(c, xp, 22, Palette.CORAL, 0.1)
+	c.draw_circle(xp, 24, Color8(12, 17, 24))
+	c.draw_arc(xp, 33, t * 1.5, t * 1.5 + PI * 1.4, 24, Palette.CORAL, 5.0, true)
+	c.draw_arc(xp, 33, t * 1.5 + PI * 1.4 + 0.3, t * 1.5 + TAU - 0.1, 8, Palette.CORAL_DIM, 5.0, true)
+	c.draw_arc(xp, 17, 0, TAU, 28, Palette.CORAL, 4.0, true)
+	c.draw_circle(xp, 7, Palette.CORAL_LIGHT)
+
+	# Chispa (late).
 	var hp := _np(path.back())
-	c.draw_circle(hp, 28, Color(Palette.TURQUOISE, 0.25))
-	c.draw_circle(hp, 16, Palette.TURQUOISE)
-	c.draw_circle(hp, 8, Color.WHITE)
+	var beat := 1.0 + 0.12 * sin(t * 6.0)
+	Kit.glow_circle(c, hp, 22 * beat, Palette.TURQUOISE, 0.22)
+	c.draw_circle(hp, 17 * beat, Palette.TURQUOISE_LIGHT)
+	c.draw_circle(hp, 9, Color.WHITE)
 	if hint_node >= 0:
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 120.0)
-		c.draw_arc(_np(hint_node), 26 + pulse * 8, 0, TAU, 32, Palette.GOLD, 5.0, true)
+		c.draw_arc(_np(hint_node), 28 + pulse * 8, 0, TAU, 32, Palette.GOLD, 5.0, true)
