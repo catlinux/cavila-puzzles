@@ -771,7 +771,7 @@ func _stroke(c: CanvasItem, pts: PackedVector2Array, col: Color, width: float) -
 
 
 ## Radio de las curvas, en casillas (0.5 = el máximo: el giro ocupa media casilla).
-const CORNER_RADIUS := 0.42
+const CORNER_RADIUS := 0.2
 
 
 ## Sustituye cada esquina del recorrido por un arco (curva de Bézier cuadrática), sin pasar
