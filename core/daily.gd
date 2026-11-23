@@ -1,8 +1,8 @@
 extends RefCounted
-## Puzle diario: tipo, dificultad y semilla dependen solo de la fecha.
+## Reto diario: el tablero depende solo de la fecha (igual para todo el mundo).
 
 const Rng = preload("res://core/rng.gd")
-const Registry = preload("res://core/registry.gd")
+const Levels = preload("res://game/levels.gd")
 
 
 static func today_key() -> String:
@@ -10,14 +10,15 @@ static func today_key() -> String:
 	return "%04d-%02d-%02d" % [d.year, d.month, d.day]
 
 
-static func puzzle_for(date_key: String) -> String:
-	var ids := Registry.ids()
-	return ids[Rng.hash_string("daily-type:" + date_key) % ids.size()]
+static func seed_for(date_key: String) -> int:
+	return Rng.hash_string("diario:" + date_key)
 
 
-static func difficulty_for(date_key: String) -> int:
-	return 1 + Rng.hash_string("daily-diff:" + date_key) % 2  # medio o difícil
+## Dificultad media-alta que varía cada día.
+static func params_for(date_key: String) -> Dictionary:
+	var t := 0.45 + 0.3 * float(Rng.hash_string("diario-dif:" + date_key) % 100) / 100.0
+	return Levels.params_from(t)
 
 
-static func seed_for(date_key: String, puzzle_id: String) -> int:
-	return Rng.hash_string("daily:%s:%s" % [date_key, puzzle_id])
+static func world_for(date_key: String) -> Dictionary:
+	return Levels.WORLDS[Rng.hash_string("diario-mundo:" + date_key) % Levels.WORLDS.size()]

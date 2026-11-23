@@ -1,107 +1,81 @@
 extends Node
-## Autoload "Game": nivel en curso, vidas, pistas, tiempo y navegación entre escenas.
+## Autoload "Game": partida en curso (nivel o reto diario), vidas y navegación.
 
-const Rng = preload("res://core/rng.gd")
 const Daily = preload("res://core/daily.gd")
-const Registry = preload("res://core/registry.gd")
+const Levels = preload("res://game/levels.gd")
+const Arrows = preload("res://game/arrows.gd")
 const I18n = preload("res://core/i18n.gd")
 
 const MAX_LIVES := 3
-const MAX_HINTS := 3
+const PLAY_SCENE := "res://ui/play.tscn"
+const HOME_SCENE := "res://ui/home.tscn"
 
-var puzzle_id := ""
-var difficulty := 0
-var index := 0
-var seed_value := 0
-var daily_key := ""  # no vacío si se juega el puzle diario
-
+var mode := "level"  # "level" o "daily"
+var level := 1
+var daily_key := ""
 var lives := MAX_LIVES
-var hints_left := MAX_HINTS
 var hints_used := 0
 var mistakes := 0
 var elapsed := 0.0
-var last_result: Dictionary = {}
-
-## Selección recordada por el selector de niveles.
-var selected_puzzle := ""
-var selected_diff := 0
 
 
 func _ready() -> void:
 	I18n.install()
-	var lang := Progress.get_language()
-	if lang == "":
+	var lang: String = Progress.setting("lang")
+	if lang == null or lang == "":
 		lang = I18n.default_language()
 	TranslationServer.set_locale(lang)
 
 
-func toggle_language() -> void:
-	var cur := TranslationServer.get_locale().substr(0, 2)
-	var nxt := "ca" if cur == "es" else "es"
-	TranslationServer.set_locale(nxt)
-	Progress.set_language(nxt)
+func set_language(lang: String) -> void:
+	TranslationServer.set_locale(lang)
+	Progress.set_setting("lang", lang)
 
 
-## Prepara el estado de un nivel sin cambiar de escena (útil para tests).
-func begin(pid: String, diff: int, idx: int, daily := "") -> void:
-	puzzle_id = pid
-	difficulty = diff
-	index = idx
-	daily_key = daily
-	seed_value = Daily.seed_for(daily, pid) if daily != "" else Rng.level_seed(pid, diff, idx)
+func language() -> String:
+	return TranslationServer.get_locale().substr(0, 2)
+
+
+## Prepara una partida sin cambiar de escena (útil para tests).
+func begin(new_mode: String, n: int = 1, key: String = "") -> void:
+	mode = new_mode
+	level = n
+	daily_key = key
 	lives = MAX_LIVES
-	hints_left = MAX_HINTS
 	hints_used = 0
 	mistakes = 0
 	elapsed = 0.0
 
 
-func start_level(pid: String, diff: int, idx: int) -> void:
-	begin(pid, diff, idx)
-	_open_puzzle()
+func puzzle() -> Dictionary:
+	if mode == "daily":
+		return Arrows.generate(Daily.seed_for(daily_key), Daily.params_for(daily_key))
+	return Arrows.generate(Levels.seed_for(level), Levels.params_for(level))
+
+
+func world() -> Dictionary:
+	return Daily.world_for(daily_key) if mode == "daily" else Levels.world(level)
+
+
+func start_level(n: int) -> void:
+	begin("level", n)
+	get_tree().change_scene_to_file(PLAY_SCENE)
 
 
 func start_daily() -> void:
-	var key := Daily.today_key()
-	begin(Daily.puzzle_for(key), Daily.difficulty_for(key), 0, key)
-	_open_puzzle()
+	begin("daily", 0, Daily.today_key())
+	get_tree().change_scene_to_file(PLAY_SCENE)
 
 
 func restart() -> void:
-	begin(puzzle_id, difficulty, index, daily_key)
-	_open_puzzle()
+	begin(mode, level, daily_key)
+	get_tree().change_scene_to_file(PLAY_SCENE)
 
 
 func next_level() -> void:
-	start_level(puzzle_id, difficulty, index + 1)
+	start_level(level + 1)
 
 
-func _open_puzzle() -> void:
-	get_tree().change_scene_to_file(Registry.get_entry(puzzle_id).scene)
+func go_home() -> void:
+	get_tree().change_scene_to_file(HOME_SCENE)
 
-
-func finish(won: bool) -> void:
-	var stars := stars_for(MAX_LIVES - lives, hints_used) if won else 0
-	last_result = {"won": won, "time": elapsed, "lives": lives, "hints": hints_used, "stars": stars}
-	if won:
-		if daily_key != "":
-			Progress.mark_daily(daily_key, puzzle_id)
-		else:
-			Progress.mark_done(puzzle_id, difficulty, index, elapsed, lives, stars)
-	get_tree().change_scene_to_file.call_deferred("res://ui/victory.tscn")
-
-
-## 3 estrellas sin errores ni pistas; se resta una por cada vida perdida o pista (mínimo 1).
-static func stars_for(lives_lost: int, hints_used_n: int) -> int:
-	var penalty := lives_lost + hints_used_n
-	return 3 if penalty == 0 else (2 if penalty <= 2 else 1)
-
-
-func go_menu() -> void:
-	get_tree().change_scene_to_file("res://ui/main_menu.tscn")
-
-
-func go_levels(pid: String = "") -> void:
-	if pid != "":
-		selected_puzzle = pid
-	get_tree().change_scene_to_file("res://ui/level_select.tscn")

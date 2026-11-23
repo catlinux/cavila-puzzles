@@ -2,22 +2,19 @@ extends "res://tests/test_case.gd"
 
 const Rng = preload("res://core/rng.gd")
 const Daily = preload("res://core/daily.gd")
-const Registry = preload("res://core/registry.gd")
-const PuzzleLogic = preload("res://core/puzzle_logic.gd")
+const Arrows = preload("res://game/arrows.gd")
 const ProgressScript = preload("res://core/progress.gd")
+const Levels = preload("res://game/levels.gd")
 
 
 func _init() -> void:
-	name = "core"
+	name = "núcleo"
 
 
 func run() -> void:
 	# Hash estable (valores de referencia FNV-1a 32 bits).
 	check(Rng.hash_string("") == 2166136261, "FNV vacío")
 	check(Rng.hash_string("a") == 0xE40C292C, "FNV 'a'")
-	check(Rng.level_seed("circuito", 0, 3) == Rng.level_seed("circuito", 0, 3), "semilla estable")
-	check(Rng.level_seed("circuito", 0, 3) != Rng.level_seed("circuito", 0, 4), "semillas distintas por nivel")
-	check(Rng.level_seed("circuito", 0, 3) != Rng.level_seed("circuito", 1, 3), "semillas distintas por dificultad")
 	var r1 := Rng.make(5)
 	var r2 := Rng.make(5)
 	check(r1.randi() == r2.randi(), "RNG reproducible")
@@ -26,29 +23,16 @@ func run() -> void:
 	arr.sort()
 	check(arr == [1, 2, 3, 4, 5, 6, 7, 8], "shuffle conserva elementos")
 
-	# Puzle diario: depende solo de la fecha.
-	check(Daily.puzzle_for("2026-03-01") == Daily.puzzle_for("2026-03-01"), "tipo diario estable")
-	check(Registry.ids().has(Daily.puzzle_for("2026-03-02")), "tipo diario registrado")
-	check(Daily.difficulty_for("2026-03-01") in [1, 2], "dificultad diaria")
-	check(Daily.seed_for("2026-03-01", "sendero") != Daily.seed_for("2026-03-02", "sendero"), "semilla cambia por día")
+	# Reto diario: depende solo de la fecha y siempre es resoluble.
 	check(Daily.today_key().length() == 10, "formato de fecha")
-	var types := {}
-	for day in 60:
-		types[Daily.puzzle_for("2026-04-%02d" % (day % 28 + 1) + str(day))] = true
-	check(types.size() == Registry.ids().size(), "el diario rota entre todos los puzles")
+	check(Daily.seed_for("2026-03-01") == Daily.seed_for("2026-03-01"), "semilla diaria estable")
+	check(Daily.seed_for("2026-03-01") != Daily.seed_for("2026-03-02"), "cambia cada día")
+	for day in scale(15):
+		var key := "2026-05-%02d" % (day + 1)
+		var p := Arrows.generate(Daily.seed_for(key), Daily.params_for(key))
+		check(not p.is_empty() and Arrows.solve(p).solvable, "reto diario resoluble " + key)
 
-	# Registro: todas las entradas existen y su lógica cumple el contrato.
-	for e in Registry.all():
-		check(ResourceLoader.exists(e.scene), "escena existe: " + e.id)
-		var lg = Registry.create_logic(e.id)
-		check(lg is PuzzleLogic, "lógica extiende PuzzleLogic: " + e.id)
-		for d in 3:
-			var p: Dictionary = lg.generate(Rng.level_seed(e.id, d, 0), d)
-			check(not p.is_empty(), "%s d%d genera" % [e.id, d])
-
-	# Estrellas.
-	var GameScript = load("res://core/game.gd")
-	check(GameScript.stars_for(0, 0) == 3 and GameScript.stars_for(1, 1) == 2 and GameScript.stars_for(2, 2) == 1, "reglas de estrellas")
+	check(Levels.stars_for(3) == 3 and Levels.stars_for(2) == 2 and Levels.stars_for(1) == 1, "estrellas por luces")
 
 	# Progreso guardado.
 	var path := "user://test_progress.json"
@@ -56,23 +40,35 @@ func run() -> void:
 	var pr = ProgressScript.new()
 	pr.save_path = path
 	pr.load_data()
-	check(pr.highest_unlocked("circuito", 0) == 0, "al inicio solo el nivel 0")
-	pr.mark_done("circuito", 0, 0, 30.0, 3, 3)
-	pr.mark_done("circuito", 0, 1, 20.0, 2, 2)
-	pr.mark_done("circuito", 0, 1, 25.0, 1, 1)  # peor resultado: no pisa el mejor
-	pr.mark_daily("2026-03-01", "sendero")
-	pr.set_language("ca")
+	check(pr.current_level() == 1 and pr.hints() == 3, "estado inicial")
+	pr.complete_level(1, 3)
+	pr.complete_level(2, 1)
+	pr.complete_level(2, 2)  # mejora: se guarda la mejor
+	pr.complete_level(1, 1)  # peor: no pisa
+	var b5: Dictionary = {}
+	for n in range(3, 6):
+		b5 = pr.complete_level(n, 3)
+	check(b5.hint_bonus == 1 and pr.hints() == 4, "pista extra cada 5 niveles")
+	check(pr.complete_level(5, 3).hint_bonus == 0, "la pista extra solo la primera vez")
+	check(pr.use_hint() and pr.hints() == 3, "gastar pista")
+	pr.complete_daily("2026-03-01")
+	pr.complete_daily("2026-03-02")
+	pr.complete_daily("2026-03-02")  # repetido: no cuenta
+	pr.set_setting("sound", false)
 	var pr2 = ProgressScript.new()
 	pr2.save_path = path
 	pr2.load_data()
-	check(pr2.is_done("circuito", 0, 1) and not pr2.is_done("circuito", 0, 2), "persistencia de niveles")
-	check(pr2.highest_unlocked("circuito", 0) == 2, "se desbloquea el siguiente")
-	check(pr2.done_count("circuito", 0) == 2 and pr2.done_count("circuito", 1) == 0, "contadores por dificultad")
-	check(is_equal_approx(pr2.data["levels"]["circuito:0"]["1"]["t"], 20.0), "se conserva el mejor tiempo")
-	check(pr2.get_stars("circuito", 0, 1) == 2 and pr2.get_stars("circuito", 0, 0) == 3, "se conservan las mejores estrellas")
-	check(pr2.total_done("circuito") == 2, "total de niveles completados")
-	check(pr2.daily_done("2026-03-01") and not pr2.daily_done("2026-03-02"), "diario completado")
-	check(pr2.get_language() == "ca", "idioma guardado")
+	check(pr2.current_level() == 6, "nivel actual persistente")
+	check(pr2.stars(1) == 3 and pr2.stars(2) == 2, "mejores estrellas")
+	check(pr2.total_stars() == 3 + 2 + 9, "total de estrellas")
+	check(pr2.daily_done("2026-03-02") and not pr2.daily_done("2026-03-03"), "diario completado")
+	check(pr2.streak("2026-03-02") == 2 and pr2.streak("2026-03-03") == 2, "racha vigente")
+	check(pr2.streak("2026-03-05") == 0, "racha perdida")
+	check(pr2.hints() == 3 + 4, "pistas por reto diario")
+	check(pr2.setting("sound") == false and pr2.setting("vibration") == true, "ajustes")
+	pr2.complete_daily("2026-03-04")  # se saltó un día: la racha vuelve a 1
+	check(pr2.streak("2026-03-04") == 1, "racha reiniciada")
+	check(ProgressScript.days_between("2026-02-28", "2026-03-01") == 1, "días entre fechas")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	pr.free()
 	pr2.free()

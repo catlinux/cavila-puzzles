@@ -1,7 +1,7 @@
 extends Node
 ## Progreso guardado en user:// (JSON). Autoload "Progress".
 
-var save_path := "user://cavila_progress.json"
+var save_path := "user://cavila_save.json"
 var data: Dictionary = {}
 
 
@@ -10,7 +10,9 @@ func _ready() -> void:
 
 
 func _default() -> Dictionary:
-	return {"version": 1, "levels": {}, "daily": {}, "language": ""}
+	return {"version": 2, "level": 1, "stars": {}, "hints": 3, "daily": {},
+		"streak": {"last": "", "count": 0},
+		"settings": {"lang": "", "sound": true, "vibration": true}}
 
 
 func load_data() -> void:
@@ -19,8 +21,14 @@ func load_data() -> void:
 		var f := FileAccess.open(save_path, FileAccess.READ)
 		if f:
 			var parsed = JSON.parse_string(f.get_as_text())
-			if parsed is Dictionary:
-				data.merge(parsed, true)
+			if parsed is Dictionary and int(parsed.get("version", 0)) == 2:
+				for k in parsed:
+					data[k] = parsed[k]
+
+
+func reset() -> void:
+	data = _default()
+	save()
 
 
 func save() -> void:
@@ -29,66 +37,96 @@ func save() -> void:
 		f.store_string(JSON.stringify(data))
 
 
-func _key(puzzle_id: String, difficulty: int) -> String:
-	return "%s:%d" % [puzzle_id, difficulty]
+# --- Niveles ----------------------------------------------------------------------
+
+## Siguiente nivel por jugar (el más alto desbloqueado).
+func current_level() -> int:
+	return int(data["level"])
 
 
-func mark_done(puzzle_id: String, difficulty: int, index: int, time_s: float, lives_left: int, stars: int = 0) -> void:
-	var levels: Dictionary = data["levels"]
-	var k := _key(puzzle_id, difficulty)
-	if not levels.has(k):
-		levels[k] = {}
-	var prev = levels[k].get(str(index), null)
-	var best := time_s
-	if prev is Dictionary and prev.get("t", INF) < time_s:
-		best = prev["t"]
-	var best_stars := maxi(stars, int(prev.get("s", 0)) if prev is Dictionary else 0)
-	levels[k][str(index)] = {"t": snappedf(best, 0.1), "l": lives_left, "s": best_stars}
-	save()
+func stars(level: int) -> int:
+	return int(data["stars"].get(str(level), 0))
 
 
-func is_done(puzzle_id: String, difficulty: int, index: int) -> bool:
-	var lv = data["levels"].get(_key(puzzle_id, difficulty), {})
-	return lv.has(str(index))
-
-
-func get_stars(puzzle_id: String, difficulty: int, index: int) -> int:
-	var e = data["levels"].get(_key(puzzle_id, difficulty), {}).get(str(index), null)
-	return int(e.get("s", 0)) if e is Dictionary else 0
-
-
-func total_done(puzzle_id: String) -> int:
+func total_stars() -> int:
 	var n := 0
-	for d in 3:
-		n += done_count(puzzle_id, d)
+	for k in data["stars"]:
+		n += int(data["stars"][k])
 	return n
 
 
-func done_count(puzzle_id: String, difficulty: int) -> int:
-	return data["levels"].get(_key(puzzle_id, difficulty), {}).size()
-
-
-## Índice más alto jugable: el siguiente al mayor nivel completado.
-func highest_unlocked(puzzle_id: String, difficulty: int) -> int:
-	var best := -1
-	for k in data["levels"].get(_key(puzzle_id, difficulty), {}):
-		best = maxi(best, int(k))
-	return best + 1
-
-
-func mark_daily(date_key: String, puzzle_id: String) -> void:
-	data["daily"][date_key] = puzzle_id
+## Registra un nivel superado. Cada 5 niveles nuevos se gana una pista.
+## Devuelve {"first": bool, "hint_bonus": int}.
+func complete_level(level: int, star_count: int) -> Dictionary:
+	var first: bool = not data["stars"].has(str(level))
+	data["stars"][str(level)] = maxi(star_count, stars(level))
+	if level >= current_level():
+		data["level"] = level + 1
+	var bonus := 0
+	if first and level % 5 == 0:
+		bonus = 1
+		data["hints"] = hints() + 1
 	save()
+	return {"first": first, "hint_bonus": bonus}
 
+
+# --- Pistas -----------------------------------------------------------------------
+
+func hints() -> int:
+	return int(data["hints"])
+
+
+func use_hint() -> bool:
+	if hints() <= 0:
+		return false
+	data["hints"] = hints() - 1
+	save()
+	return true
+
+
+# --- Reto diario y racha ------------------------------------------------------------
 
 func daily_done(date_key: String) -> bool:
 	return data["daily"].has(date_key)
 
 
-func get_language() -> String:
-	return data.get("language", "")
+## Marca el reto del día. Mantiene la racha de días seguidos y da 2 pistas.
+func complete_daily(date_key: String) -> Dictionary:
+	if daily_done(date_key):
+		return {"hint_bonus": 0}
+	data["daily"][date_key] = true
+	var last: String = data["streak"]["last"]
+	if last != "" and days_between(last, date_key) == 1:
+		data["streak"]["count"] = int(data["streak"]["count"]) + 1
+	elif last != date_key:
+		data["streak"]["count"] = 1
+	data["streak"]["last"] = date_key
+	data["hints"] = hints() + 2
+	save()
+	return {"hint_bonus": 2}
 
 
-func set_language(lang: String) -> void:
-	data["language"] = lang
+## Racha vigente a fecha `today` (se pierde si ayer no se jugó).
+func streak(today: String) -> int:
+	var last: String = data["streak"]["last"]
+	if last == "":
+		return 0
+	var gap := days_between(last, today)
+	return int(data["streak"]["count"]) if gap <= 1 else 0
+
+
+static func days_between(a: String, b: String) -> int:
+	var ta := Time.get_unix_time_from_datetime_string(a + "T12:00:00")
+	var tb := Time.get_unix_time_from_datetime_string(b + "T12:00:00")
+	return int(round((tb - ta) / 86400.0))
+
+
+# --- Ajustes ----------------------------------------------------------------------
+
+func setting(key: String):
+	return data["settings"].get(key)
+
+
+func set_setting(key: String, value) -> void:
+	data["settings"][key] = value
 	save()
