@@ -49,6 +49,9 @@ func begin(new_mode: String, n: int = 1, key: String = "") -> void:
 
 
 var _cache := {}  # tableros ya generados (la miniatura del inicio y la partida comparten)
+var _mutex := Mutex.new()
+var _thread: Thread
+var _prefetching := -1
 
 
 func puzzle() -> Dictionary:
@@ -59,18 +62,67 @@ func puzzle() -> Dictionary:
 
 func puzzle_for_level(n: int) -> Dictionary:
 	var key := "L%d" % n
-	if not _cache.has(key):
-		if _cache.size() > 6:
-			_cache.clear()
-		_cache[key] = Arrows.generate(Levels.seed_for(n), Levels.params_for(n))
-	return _cache[key]
+	_mutex.lock()
+	var cached: Dictionary = _cache.get(key, {})
+	_mutex.unlock()
+	if not cached.is_empty():
+		return cached
+	if _prefetching == n and _thread and _thread.is_started():
+		_thread.wait_to_finish()  # se estaba preparando: esperar a que termine
+		_prefetching = -1
+		_mutex.lock()
+		cached = _cache.get(key, {})
+		_mutex.unlock()
+		if not cached.is_empty():
+			return cached
+	var p := Arrows.generate(Levels.seed_for(n), Levels.params_for(n))
+	_store(key, p)
+	return p
+
+
+func _store(key: String, p: Dictionary) -> void:
+	_mutex.lock()
+	if _cache.size() > 6:
+		_cache.clear()
+	_cache[key] = p
+	_mutex.unlock()
+
+
+## Prepara el nivel n en un hilo aparte (para que "Continuar" sea inmediato).
+func prefetch(n: int) -> void:
+	_mutex.lock()
+	var has := _cache.has("L%d" % n)
+	_mutex.unlock()
+	if has or (_thread and _thread.is_started()):
+		return
+	_prefetching = n
+	_thread = Thread.new()
+	_thread.start(func():
+		var p := Arrows.generate(Levels.seed_for(n), Levels.params_for(n))
+		_store("L%d" % n, p))
+
+
+func _process(_d: float) -> void:
+	# Recoger el hilo de precarga cuando termina.
+	if _thread and _thread.is_started() and not _thread.is_alive():
+		_thread.wait_to_finish()
+		_prefetching = -1
+
+
+func _exit_tree() -> void:
+	if _thread and _thread.is_started():
+		_thread.wait_to_finish()
 
 
 func puzzle_for_daily(key: String) -> Dictionary:
 	var k := "D" + key
-	if not _cache.has(k):
-		_cache[k] = Arrows.generate(Daily.seed_for(key), Daily.params_for(key))
-	return _cache[k]
+	_mutex.lock()
+	var cached: Dictionary = _cache.get(k, {})
+	_mutex.unlock()
+	if cached.is_empty():
+		cached = Arrows.generate(Daily.seed_for(key), Daily.params_for(key))
+		_store(k, cached)
+	return cached
 
 
 ## Dificultad (0..1) de la partida en curso.

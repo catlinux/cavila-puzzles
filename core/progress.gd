@@ -75,7 +75,10 @@ func complete_level(level: int, star_count: int, points: int = 0) -> Dictionary:
 	var bonus := 0
 	if first and level % 5 == 0:
 		bonus = 1
-		data["hints"] = hints() + 1
+	if first:
+		# Premio extra la primera vez que se supera un nivel súper difícil o extra.
+		bonus += {"super": 1, "extra": 2}.get(preload("res://game/levels.gd").tier(level), 0)
+	data["hints"] = hints() + bonus
 	bonus += _event_progress()
 	add_league_points(points)
 	save()

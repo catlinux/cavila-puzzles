@@ -23,6 +23,30 @@ const WORLDS := [
 ]
 
 
+const MAX_W := 32
+const MAX_H := 50
+
+
+## Progresión del tamaño del tablero (0..1): crece nivel a nivel y llega al máximo hacia el 150.
+static func size_t(level: int) -> float:
+	var n := maxi(level, 1)
+	var s := clampf(pow((n - 1) / 149.0, 0.7), 0.0, 1.0)
+	# No todos del mismo tamaño: cada nivel varía, y la categoría lo agranda o lo reduce.
+	var rng := Rng.make(Rng.derive(seed_for(n), 444))
+	match tier(n):
+		"easy":
+			s *= 0.6
+		"normal":
+			s *= rng.randf_range(0.65, 1.0)
+		"hard":
+			s *= rng.randf_range(0.85, 1.05)
+		"super":
+			s = maxf(s * 1.1, s + 0.12)
+		"extra":
+			s = maxf(s * 1.25, s + 0.25)
+	return clampf(s, 0.0, 1.0)
+
+
 static func world_index(level: int) -> int:
 	return (maxi(level, 1) - 1) / LEVELS_PER_WORLD
 
@@ -39,15 +63,37 @@ static func beat(level: int) -> int:
 	return 0 if m == 1 or m == 6 else 1
 
 
+## Categoría de cada nivel. La mayoría son normales; de vez en cuando hay un respiro y,
+## cada cierto tiempo, niveles difíciles, súper difíciles o extra (siempre en los múltiplos
+## de 50). Depende solo del número de nivel.
+const TIERS := ["easy", "normal", "hard", "super", "extra"]
+const TIER_BOOST := {"easy": -0.1, "normal": 0.0, "hard": 0.12, "super": 0.22, "extra": 0.32}
+
+
+static func tier(level: int) -> String:
+	var n := maxi(level, 1)
+	if n < 8:
+		return "normal"
+	if n % 50 == 0:
+		return "extra"
+	var r := Rng.make(Rng.derive(seed_for(n), 333)).randf()
+	if beat(n) == 2:
+		return "super" if r < 0.3 else "hard"
+	if beat(n) == 0:
+		return "easy"
+	if n >= 30 and r < 0.03:
+		return "extra"
+	if n >= 15 and r < 0.1:
+		return "super"
+	if r < 0.25:
+		return "hard"
+	return "normal"
+
+
 static func difficulty(level: int) -> float:
 	var n := maxi(level, 1)
 	var t := clampf(pow(log(float(n)) / log(3000.0), 1.3), 0.0, 1.0)
-	match beat(n):
-		0:
-			t -= 0.07
-		2:
-			t += 0.08
-	return clampf(t, 0.0, 1.0)
+	return clampf(t + TIER_BOOST[tier(n)], 0.0, 1.0)
 
 
 static func params_for(level: int) -> Dictionary:
@@ -69,9 +115,12 @@ static func params_from(t: float, seed_value: int = 0, shapes: int = 1, level: i
 	if shapes > 1:
 		# Los niveles reto estrenan la última forma desbloqueada; el resto, al azar.
 		kind = Shapes.KINDS[1 + rng.randi() % (shapes - 1)] if beat(level) == 2 else Shapes.KINDS[rng.randi() % shapes]
-	var base_w := lerpf(5.0, 22.0, t) / sqrt(Shapes.area_ratio(kind))
-	var w := clampi(int(round(base_w + rng.randf_range(-1.5, 1.5))), 5, 24)
-	var h := clampi(int(round(w * rng.randf_range(1.25, 1.6))), 6, 36)
+	# El tamaño crece nivel a nivel hasta el máximo (unas 32×50 casillas) hacia el nivel 150;
+	# los niveles de respiro son algo más pequeños.
+	var st := size_t(level) if level > 0 else t
+	var base_w := lerpf(5.0, 32.0, st) / sqrt(Shapes.area_ratio(kind))
+	var w := clampi(int(round(base_w + rng.randf_range(-1.5, 1.0))), 5, MAX_W)
+	var h := clampi(int(round(w * rng.randf_range(1.35, 1.6))), 6, MAX_H)
 	var shape := Shapes.make(kind, w, h, rng)
 	# Estilo: 0 = flechas pequeñas, 1 = mixto, 2 = serpientes.
 	var style := rng.randi() % 3

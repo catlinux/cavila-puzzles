@@ -16,6 +16,9 @@ const GOLD := Color8(255, 176, 32)
 const RED := Color8(229, 72, 77)
 const OFF := Color8(213, 218, 229)
 const SHADOW := Color(0.114, 0.157, 0.259, 0.10)
+## Colores de las categorías de nivel.
+const TIER_COLORS := {"easy": Color8(16, 185, 129), "hard": Color8(245, 130, 32),
+	"super": Color8(229, 72, 77), "extra": Color8(139, 61, 230)}
 
 const FONT_FILES := {
 	"display": "res://assets/fonts/fredoka-600.woff2",

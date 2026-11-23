@@ -102,12 +102,13 @@ func _ready() -> void:
 	else:
 		title_text = "%s %d" % [tr("LEVEL"), Game.level]
 		sub_text = "%s %d · %s" % [tr("WORLD"), Levels.world_index(Game.level) + 1, tr(world.key)]
-		if Levels.beat(Game.level) == 2:
-			sub_text += " · " + tr("CHALLENGE")
 		if Levels.params_for(Game.level).maze:
 			sub_text += " · " + tr("MAZE")
 	titles.add_child(Style.label(title_text, 50, Style.INK, "display", HORIZONTAL_ALIGNMENT_CENTER))
 	titles.add_child(Style.label(sub_text.to_upper(), 23, Style.SUB, "body_bold", HORIZONTAL_ALIGNMENT_CENTER))
+	var tier := Levels.tier(Game.level) if Game.mode == "level" else "normal"
+	if Style.TIER_COLORS.has(tier):
+		titles.add_child(Style.label(tr("TIER_" + tier.to_upper()).to_upper(), 24, Style.TIER_COLORS[tier], "display", HORIZONTAL_ALIGNMENT_CENTER))
 	top.add_child(titles)
 	var gear := RoundButton.new("gear-six-bold")
 	gear.pressed.connect(func():
@@ -186,6 +187,8 @@ func _ready() -> void:
 	for c in puzzle.get("rocks", []):
 		_rocks[c] = true
 	_prepare()
+	if Game.mode == "level":
+		Game.prefetch(Game.level + 1)
 	rival_time = Levels.rival_time(puzzle.arrows.size(), int(puzzle.get("depth", 0)), Game.seed_value())
 	_update_moves()
 	# Botón para volver a ver el tablero entero (solo visible con zoom).
@@ -704,11 +707,18 @@ func _draw_shape() -> void:
 					Style.fill_round(board, r, rad, Style.CARD, 4)
 
 
-## Obstáculo: bloque gris con un brillo, que ninguna flecha puede atravesar.
+## Obstáculo: bloque de piedra oscuro con relieve, claramente infranqueable.
 func _draw_rock(c: Vector2i) -> void:
-	var r := Rect2(_origin + Vector2(c) * _cell, Vector2(_cell, _cell)).grow(-_cell * 0.06)
-	Style.fill_round(board, r, _cell * 0.22, Color8(214, 219, 230), 4)
-	Style.fill_round(board, Rect2(r.position + Vector2(r.size.x * 0.18, r.size.y * 0.16), r.size * Vector2(0.4, 0.18)), _cell * 0.08, Color(1, 1, 1, 0.55), 3)
+	var r := Rect2(_origin + Vector2(c) * _cell, Vector2(_cell, _cell)).grow(-_cell * 0.04)
+	var rad := _cell * 0.2
+	Style.fill_round(board, Rect2(r.position + Vector2(0, _cell * 0.08), r.size), rad, Color8(92, 102, 122), 4)
+	Style.fill_round(board, r, rad, Color8(132, 142, 162), 4)
+	Style.fill_round(board, Rect2(r.position + Vector2(r.size.x * 0.16, r.size.y * 0.14), r.size * Vector2(0.42, 0.16)), _cell * 0.07, Color(1, 1, 1, 0.35), 3)
+	# Dos grietas para que se lea como piedra.
+	var o := r.position
+	var s := r.size.x
+	board.draw_line(o + Vector2(0.62, 0.45) * s, o + Vector2(0.78, 0.68) * s, Color8(100, 110, 130), maxf(1.0, _cell * 0.05), true)
+	board.draw_line(o + Vector2(0.3, 0.6) * s, o + Vector2(0.42, 0.8) * s, Color8(100, 110, 130), maxf(1.0, _cell * 0.05), true)
 
 
 ## Trazo con extremos y uniones redondeadas.

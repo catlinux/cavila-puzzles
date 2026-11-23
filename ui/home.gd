@@ -99,7 +99,20 @@ func _ready() -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 0)
 	var wi := Levels.world_index(level)
-	info.add_child(Style.label(("%s %d · %s" % [tr("WORLD"), wi + 1, tr(world.key)]).to_upper(), 24, world.a, "body_bold"))
+	var tier := Levels.tier(level)
+	var kicker := ("%s %d · %s" % [tr("WORLD"), wi + 1, tr(world.key)]).to_upper()
+	var krow := HBoxContainer.new()
+	krow.add_theme_constant_override("separation", 10)
+	krow.add_child(Style.label(kicker, 24, world.a, "body_bold"))
+	if Style.TIER_COLORS.has(tier):
+		var badge := Control.new()
+		var btxt: String = tr("TIER_" + tier.to_upper()).to_upper()
+		badge.custom_minimum_size = Vector2(Style.text_width(btxt, 20, "display") + 28, 36)
+		badge.draw.connect(func():
+			Style.fill_round(badge, Rect2(Vector2(0, 2), badge.size - Vector2(0, 4)), 16.0, Style.TIER_COLORS[tier], 6)
+			Style.text_at(badge, badge.size / 2.0, btxt, 20, Color.WHITE))
+		krow.add_child(badge)
+	info.add_child(krow)
 	info.add_child(Style.label("%s %d" % [tr("LEVEL"), level], 78, Style.INK, "display_bold"))
 	var in_world := (level - 1) % Levels.LEVELS_PER_WORLD
 	var puzzle := Game.puzzle_for_level(level)
@@ -342,11 +355,13 @@ func _draw_path() -> void:
 			Style.gradient_shape(c, r, 52.0, world.a, world.b)
 			Style.text_at(c, p, str(n), 42, Color.WHITE)
 		else:
+			var t := Levels.tier(n)
+			var ring_col: Color = Style.TIER_COLORS.get(t, Color(Style.INK, 0.18)) if t != "easy" else Color(Style.INK, 0.18)
 			var segs := 24
 			for i in segs:
-				if i % 2 == 0:
-					c.draw_arc(p, 39, TAU * i / segs, TAU * (i + 1) / segs, 4, Color(Style.INK, 0.18), 3.0, true)
-			Style.text_at(c, p, str(n), 32, Style.SUB)
+				if i % 2 == 0 or t in ["hard", "super", "extra"]:
+					c.draw_arc(p, 39, TAU * i / segs, TAU * (i + 1) / segs, 4, ring_col, 3.0 if t not in ["super", "extra"] else 5.0, true)
+			Style.text_at(c, p, str(n), 32, ring_col if t in ["hard", "super", "extra"] else Style.SUB)
 
 
 func _path_input(ev: InputEvent) -> void:

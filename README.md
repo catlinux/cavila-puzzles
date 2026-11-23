@@ -10,11 +10,14 @@ se sintetiza por código. Textos en **español** y **catalán**.
 
 ## Qué tiene
 
-- **Niveles ilimitados** con dificultad creciente: tableros de 5×7 a 24×36, con flechas de todos los
+- **Categorías de nivel**: la mayoría normales, con algún respiro y, de vez en cuando, niveles
+  **difíciles**, **súper difíciles** (+1 pista) y **extra** (+2 pistas; todos los múltiplos de 50).
+- **Niveles ilimitados** con dificultad creciente: el tablero crece nivel a nivel hasta 32×50
+  hacia el nivel 150 (con tamaños variados), con flechas de todos los
   tamaños (incluidas "serpientes" largas que se enroscan) y cadenas de dependencias cada vez más largas.
   Ritmo en bloques de 10 (respiro, normales y un reto).
 - **Tableros variados** (desde el nivel 6, una forma nueva cada 4 niveles): rectángulo, esquinas recortadas, óvalo, rombo, cruz, anillo, reloj de arena,
-  escalones y tableros con **rocas** que bloquean el paso. Se desbloquean poco a poco.
+  escalones y tableros con **rocas**: obstáculos infranqueables (también el centro del anillo). Se desbloquean poco a poco.
 - **Niveles laberinto** (desde el 15; todos los niveles reto desde el 20): flechas larguísimas que
   serpentean y llenan todo el tablero. Se generan cubriendo el tablero con caminos largos (regla de
   Warnsdorff) y fijando la punta de cada uno con una simulación inversa de la partida, lo que

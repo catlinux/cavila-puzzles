@@ -101,6 +101,21 @@ func run() -> void:
 		if not par.rocks.is_empty():
 			with_rocks += 1
 	check(kinds.size() >= 8, "variedad de formas (%d)" % kinds.size())
+	# Ninguna salida cruza un obstáculo, ni siquiera el centro del anillo.
+	var crossings := 0
+	for lv in range(30, 250, 7):
+		var par2 := Levels.params_for(lv)
+		if par2.rocks.is_empty():
+			continue
+		var g2 := Arrows.generate(Levels.seed_for(lv), par2)
+		var rk := {}
+		for c in g2.rocks:
+			rk[c] = true
+		for i in g2.arrows.size():
+			for c in Arrows.exit_path(g2, i):
+				if rk.has(c):
+					crossings += 1
+	check(crossings == 0, "ninguna flecha puede atravesar un obstáculo (%d)" % crossings)
 	check(with_rocks >= 5, "hay niveles con obstáculos (%d)" % with_rocks)
 	check(Levels.params_for(1).shape == "rect" and Levels.params_for(5).shape == "rect", "los primeros niveles son rectangulares")
 	check(Levels.unlocked_shapes(26) >= 7, "las rocas llegan hacia el nivel 26")
@@ -153,14 +168,33 @@ func run() -> void:
 
 	# Curva: crece en media y los primeros niveles son pequeños.
 	check(Levels.params_for(1).w <= 6 and Levels.params_for(1).h <= 10, "nivel 1 pequeño")
+	check(Levels.params_for(10).w <= 11, "nivel 10 todavía pequeño (%d)" % Levels.params_for(10).w)
+	var grows := true
+	for k in range(1, 15):
+		if Levels.size_t(k * 10 + 1) < Levels.size_t((k - 1) * 10 + 1):
+			grows = false
+	check(grows, "el tamaño crece nivel a nivel")
 	var avg_lo := 0.0
 	var avg_hi := 0.0
 	for k in 20:
 		avg_lo += Levels.difficulty(11 + k)
 		avg_hi += Levels.difficulty(500 + k)
 	check(avg_hi > avg_lo, "la dificultad crece")
-	check(Levels.params_for(100000).w <= 24 and Levels.params_for(100000).h <= 36, "tamaño máximo acotado (móvil)")
+	check(Levels.params_for(100000).w <= Levels.MAX_W and Levels.params_for(100000).h <= Levels.MAX_H, "tamaño máximo acotado")
+	check(Levels.params_for(200).w >= 26 and Levels.params_for(200).h >= 36, "hacia el nivel 150-200 se llega a tableros grandes (%dx%d)" % [Levels.params_for(200).w, Levels.params_for(200).h])
 	check(Levels.beat(10) == 2 and Levels.beat(11) == 0 and Levels.beat(12) == 1, "ritmo de 10 niveles")
+	# Categorías: la mayoría normales, de vez en cuando difíciles, súper y extra.
+	var counts := {"easy": 0, "normal": 0, "hard": 0, "super": 0, "extra": 0}
+	for lv in range(1, 1001):
+		counts[Levels.tier(lv)] += 1
+	check(counts.normal > 350 and counts.hard > 100 and counts.super > 40 and counts.extra >= 20 and counts.easy > 80, "reparto de categorías %s" % [counts])
+	check(Levels.tier(50) == "extra" and Levels.tier(100) == "extra", "los múltiplos de 50 son extra")
+	check(Levels.tier(3) == "normal", "los primeros niveles son normales")
+	check(Levels.difficulty(250) > Levels.difficulty(251) or Levels.tier(251) != "normal", "un extra es más difícil que el siguiente nivel normal")
+	var sizes := {}
+	for lv in range(150, 200):
+		sizes[Levels.params_for(lv).w] = true
+	check(sizes.size() >= 6, "no todos los tableros son del mismo tamaño (%d anchos distintos)" % sizes.size())
 	check(Levels.world_index(1) == 0 and Levels.world_index(30) == 0 and Levels.world_index(31) == 1, "mundos de 30")
 	# Profundidad media creciente.
 	var d_lo := 0
