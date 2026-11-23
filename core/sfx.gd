@@ -6,7 +6,7 @@ extends Node
 
 const RATE := 22050
 const MUSIC_RATE := 12000
-const MUSIC_VERSION := 2
+const MUSIC_VERSION := 3
 const MUSIC_CACHE := "user://ambient_v%d.pcm"
 
 ## Pentatónica de Do (Do5 … Do6): cualquier secuencia de notas suena bien.
@@ -29,13 +29,21 @@ func _ready() -> void:
 	_streams["lose"] = _arpeggio([659.25, 523.25, 440.0], 0.22, 0.16)
 	for i in 6:
 		var p := AudioStreamPlayer.new()
-		p.volume_db = -3.0
 		add_child(p)
 		_players.append(p)
 	_music = AudioStreamPlayer.new()
-	_music.volume_db = -11.0
 	add_child(_music)
+	apply_volumes()
 	_start_music()
+
+
+## Aplica los volúmenes de Ajustes (0..1). La música se normaliza más alta que antes.
+func apply_volumes() -> void:
+	var mv: float = Progress.setting("music_volume")
+	var sv: float = Progress.setting("sfx_volume")
+	_music.volume_db = linear_to_db(maxf(mv, 0.001)) + 1.0
+	for p in _players:
+		p.volume_db = linear_to_db(maxf(sv, 0.001)) - 1.0
 
 
 func _exit_tree() -> void:
@@ -203,7 +211,7 @@ func _ambient() -> PackedByteArray:
 	var peak := 0.0001
 	for v in buf:
 		peak = maxf(peak, absf(v))
-	var gain := 0.55 / peak
+	var gain := 0.85 / peak
 	var data := PackedByteArray()
 	data.resize(n * 2)
 	for i in n:

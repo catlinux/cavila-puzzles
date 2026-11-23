@@ -73,6 +73,27 @@ func _run() -> void:
 	home.queue_free()
 	await _frames(1)
 
+	# Ligas: pantalla con las tres pestañas y aviso de resultado al terminar una.
+	Progress.complete_level(1, 3, 5000)
+	var lgs = await _spawn("res://ui/leagues.tscn")
+	check(lgs._list.get_child_count() == 20, "clasificación diaria de 20")
+	lgs._select("weekly")
+	await _frames(2)
+	check(lgs._list.get_child_count() == 30, "clasificación semanal de 30")
+	lgs._select("flash")
+	await _frames(2)
+	check(lgs._list.get_child_count() == 15, "clasificación relámpago de 15")
+	lgs.queue_free()
+	await _frames(1)
+	Progress.now_override = Progress.now() + 9 * 86400
+	var h2 = await _spawn("res://ui/home.tscn")
+	check(Progress.pending_league_results().size() <= 2, "al abrir el inicio se cobra un resultado de liga")
+	h2.queue_free()
+	await _frames(1)
+	Progress.now_override = -1
+	Progress.reset()
+	Progress.set_setting("sound", false)
+
 	# Partidas completas: tocar las flechas en el orden del solucionador, por posición en pantalla.
 	for lv in [1, 2, 10, 57, 400]:
 		var v = await _play("level", lv)

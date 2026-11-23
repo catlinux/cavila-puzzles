@@ -101,7 +101,8 @@ func run() -> void:
 			with_rocks += 1
 	check(kinds.size() >= 8, "variedad de formas (%d)" % kinds.size())
 	check(with_rocks >= 5, "hay niveles con obstáculos (%d)" % with_rocks)
-	check(Levels.params_for(1).shape == "rect" and Levels.params_for(11).shape == "rect", "los primeros niveles son rectangulares")
+	check(Levels.params_for(1).shape == "rect" and Levels.params_for(5).shape == "rect", "los primeros niveles son rectangulares")
+	check(Levels.unlocked_shapes(26) >= 7, "las rocas llegan hacia el nivel 26")
 	# Variedad de largos en niveles altos: hay serpientes largas y flechas cortas a la vez.
 	var long_ok := 0
 	for lv in [301, 455, 702, 1003]:

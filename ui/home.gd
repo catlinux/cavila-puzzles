@@ -125,16 +125,65 @@ func _ready() -> void:
 		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
 			Game.start_daily())
 	cards.add_child(daily)
-	var ev := Progress.event_state()
-	var left := Progress.days_left_in_week()
-	var ev_title: String = tr("EVENT_%d" % (int(ev.week) % 5))
-	var ev_done: bool = ev.claimed
-	var event := _small_card("trophy-fill", Color8(108, 76, 245),
-		"%s · %s" % [tr("EVENT").to_upper(), (tr("DAY_LEFT") if left == 1 else tr("DAYS_LEFT") % left).to_upper()],
-		ev_title, "check-bold" if ev_done else "star-fill", Color8(16, 185, 129) if ev_done else Style.GOLD,
-		tr("EVENT_DONE") if ev_done else "%d / %d %s" % [mini(int(ev.count), Progress.EVENT_GOAL), Progress.EVENT_GOAL, tr("LEVELS_IN_WORLD")])
-	cards.add_child(event)
+	var lg := Progress.league("daily")
+	var lg_left := int(lg.end) - Progress.now()
+	var lg_rows := Progress.league_standings(lg)
+	var lg_rank := preload("res://game/leagues.gd").rank_of_you(lg_rows)
+	var league := _small_card("crown-fill", Color8(108, 76, 245),
+		"%s · %dH" % [(tr("LEAGUE_OF") % tr("LEAGUE_DAILY")).to_upper(), lg_left / 3600],
+		(tr("RANK_OF") % [lg_rank, lg_rows.size()]) if int(lg.points) > 0 else tr("PLAY_TO_JOIN"),
+		"trophy-fill", Style.GOLD, tr("POINTS") % Style.fmt_int(int(lg.points)))
+	league.gui_input.connect(func(ev):
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
+			Game.go_leagues("daily"))
+	cards.add_child(league)
 	Style.fade_in(self)
+	_show_league_results()
+
+
+## Si ha terminado alguna liga en la que participaste, muestra el resultado y da el premio.
+func _show_league_results() -> void:
+	var pending := Progress.pending_league_results()
+	if pending.is_empty():
+		return
+	var res: Dictionary = pending[0]
+	var layer := Control.new()
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(layer)
+	var dim := ColorRect.new()
+	dim.color = Color(Style.INK, 0.35)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(center)
+	var panel := Style.card(56, 44)
+	center.add_child(panel)
+	var vb := VBoxContainer.new()
+	vb.custom_minimum_size = Vector2(560, 0)
+	vb.add_theme_constant_override("separation", 18)
+	panel.add_child(vb)
+	var ic := TextureRect.new()
+	ic.texture = Style.icon("trophy-fill" if res.rank <= 3 else "crown-fill", Style.GOLD if res.rank <= 3 else world.a, 110)
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	vb.add_child(ic)
+	vb.add_child(Style.label(tr("LEAGUE_END") % tr("LEAGUE_" + String(res.type).to_upper()).to_lower(), 44, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
+	vb.add_child(Style.label(tr("YOUR_RANK") % [res.rank, res.size], 34, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER))
+	if res.prize > 0:
+		vb.add_child(Style.label((tr("HINT_BONUS") if res.prize == 1 else tr("HINT_BONUS_N")) % res.prize, 38, Style.GOLD, "display", HORIZONTAL_ALIGNMENT_CENTER))
+	var change := Progress.claim_league(res.key)
+	if change != 0:
+		var div_name: String = tr(preload("res://game/leagues.gd").DIVISIONS[int(Progress.data.division)])
+		vb.add_child(Style.label((tr("PROMOTED") if change > 0 else tr("DEMOTED")) % div_name, 34,
+			Color8(16, 185, 129) if change > 0 else Style.RED, "display", HORIZONTAL_ALIGNMENT_CENTER))
+	var ok := PillButton.new(tr("OK"), true, 112.0)
+	ok.set_colors(world.a, world.b)
+	ok.pressed.connect(func():
+		layer.queue_free()
+		get_tree().reload_current_scene())
+	vb.add_child(ok)
+	Sfx.play("win")
 
 
 func _small_card(icon: String, tint: Color, kicker: String, title: String, foot_icon: String, foot_col: Color, foot: String) -> PanelContainer:

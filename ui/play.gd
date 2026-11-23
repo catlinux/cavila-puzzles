@@ -49,6 +49,12 @@ var _zoom0 := 1.0
 var _last_mid := Vector2.ZERO
 var _fit_btn: Control
 var _holes := {}
+var _fx: Control  # capa de piezas en movimiento, destellos y partículas
+var _dyn_key := ""
+var piece_style := "arrows"
+## Estilo "colores": un tono suave por dirección (arriba, abajo, izquierda, derecha).
+const DIRS_ORDER := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
+const DIR_COLORS := [Color8(37, 99, 235), Color8(13, 148, 136), Color8(192, 38, 211), Color8(234, 88, 12)]
 var _rocks := {}
 
 var board: Control
@@ -102,7 +108,12 @@ func _ready() -> void:
 	titles.add_child(Style.label(sub_text.to_upper(), 23, Style.SUB, "body_bold", HORIZONTAL_ALIGNMENT_CENTER))
 	top.add_child(titles)
 	var gear := RoundButton.new("gear-six-bold")
-	gear.pressed.connect(func(): add_child(SettingsPanel.new(world.a, world.b)))
+	gear.pressed.connect(func():
+		var sp := SettingsPanel.new(world.a, world.b)
+		sp.style_changed.connect(func():
+			piece_style = Progress.setting("piece_style")
+			board.queue_redraw())
+		add_child(sp))
 	top.add_child(gear)
 
 	# Vidas y pistas.
@@ -132,6 +143,12 @@ func _ready() -> void:
 	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	board.mouse_filter = Control.MOUSE_FILTER_STOP
 	board.clip_contents = true
+	_fx = Control.new()
+	_fx.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fx.draw.connect(_draw_fx)
+	board.add_child(_fx)
+	piece_style = Progress.setting("piece_style")
 	board.draw.connect(_draw_board)
 	board.gui_input.connect(_board_input)
 	vb.add_child(board)
@@ -175,7 +192,8 @@ func _ready() -> void:
 	_fit_btn.pressed.connect(func():
 		_zoom = 1.0
 		_pan = Vector2.ZERO
-		_fit_btn.visible = false)
+		_fit_btn.visible = false
+		board.queue_redraw())
 	board.add_child(_fit_btn)
 	board.resized.connect(func(): _fit_btn.position = Vector2(board.size.x - 92, 8))
 	if Game.mode == "level" and Game.level <= 3:
@@ -297,6 +315,8 @@ func _win() -> void:
 	_record = false
 	if Game.mode == "daily":
 		bonus = Progress.complete_daily(Game.daily_key).hint_bonus
+		Progress.add_league_points(score)
+		Progress.save()
 	else:
 		var r := Progress.complete_level(Game.level, stars, score)
 		bonus = r.hint_bonus
@@ -345,7 +365,12 @@ func _process(delta: float) -> void:
 	_shake = maxf(0.0, _shake - delta * 2.5)
 	if hint_arrow >= 0 and _clock > _hint_until:
 		hint_arrow = -1
-	board.queue_redraw()
+	# La capa fija solo se redibuja cuando cambia qué piezas se mueven (o durante una sacudida).
+	var dyn := "%s|%s|%d" % [_anims.keys(), _flash.keys(), hint_arrow]
+	if dyn != _dyn_key or _shake > 0.0:
+		_dyn_key = dyn
+		board.queue_redraw()
+	_fx.queue_redraw()
 	_progress.queue_redraw()
 	for c in _live:
 		c.queue_redraw()
@@ -451,6 +476,7 @@ func _clamp_pan() -> void:
 		_pan = _pan.clamp(-extra, extra)
 	if _fit_btn:
 		_fit_btn.visible = _zoom > 1.01
+	board.queue_redraw()
 
 
 ## Flecha bajo el punto (coordenadas del tablero), con tolerancia para dedos.
@@ -514,13 +540,17 @@ func _offset(i: int) -> float:
 	return an.amp * (1.0 - ease(p - 1.0, 1.8))
 
 
+func _is_dynamic(i: int) -> bool:
+	return _anims.has(i) or _flash.has(i) or i == hint_arrow
+
+
+## Capa fija: forma del tablero, puntos, rocas y piezas quietas.
 func _draw_board() -> void:
 	if puzzle.is_empty():
 		return
 	_layout()
 	_draw_shape()
-	var shake := Vector2(sin(_clock * 70.0) * _shake * 12.0, 0)
-	board.draw_set_transform(shake)
+	board.draw_set_transform(_shake_offset())
 	var dot := maxf(1.6, _cell * 0.05)
 	for y in puzzle.h:
 		for x in puzzle.w:
@@ -531,18 +561,32 @@ func _draw_board() -> void:
 				_draw_rock(c)
 			else:
 				board.draw_circle(_px(Vector2(x, y)), dot, Style.DOT)
-	for pass_moving in [false, true]:
-		for i in puzzle.arrows.size():
-			if _gone.has(i) or _anims.has(i) != pass_moving:
-				continue
-			_draw_arrow(i)
-	for p in _particles:
-		var a: float = clampf(p.life / p.max, 0.0, 1.0)
-		board.draw_circle(p.p, p.size * a, Color(p.col, a))
+	for i in puzzle.arrows.size():
+		if not _gone.has(i) and not _is_dynamic(i):
+			_draw_arrow(board, i)
 	board.draw_set_transform(Vector2.ZERO)
 
 
-func _draw_arrow(i: int) -> void:
+## Capa en movimiento: piezas saliendo o chocando, pista y partículas (cada fotograma).
+func _draw_fx() -> void:
+	if puzzle.is_empty():
+		return
+	_layout()
+	_fx.draw_set_transform(_shake_offset())
+	for i in puzzle.arrows.size():
+		if not _gone.has(i) and _is_dynamic(i):
+			_draw_arrow(_fx, i)
+	for p in _particles:
+		var a: float = clampf(p.life / p.max, 0.0, 1.0)
+		_fx.draw_circle(p.p, p.size * a, Color(p.col, a))
+	_fx.draw_set_transform(Vector2.ZERO)
+
+
+func _shake_offset() -> Vector2:
+	return Vector2(sin(_clock * 70.0) * _shake * 12.0, 0)
+
+
+func _draw_arrow(c: CanvasItem, i: int) -> void:
 	var a: Dictionary = puzzle.arrows[i]
 	var t := _offset(i)
 	var alpha := 1.0
@@ -551,10 +595,12 @@ func _draw_arrow(i: int) -> void:
 	var pts := _window(i, t)
 	var col: Color = Style.INK
 	var wdt := maxf(3.0, _cell * 0.15)
+	if piece_style == "colors":
+		col = DIR_COLORS[DIRS_ORDER.find(a.dir)]
 	if i == hint_arrow:
 		var pulse := 0.5 + 0.5 * sin(_clock * 6.0)
-		col = world.a
-		_stroke(pts, Color(world.a, (0.14 + 0.1 * pulse) * alpha), minf(wdt * (2.6 + 0.6 * pulse), _cell * 0.55))
+		col = Style.GOLD
+		_stroke(c, pts, Color(Style.GOLD, (0.18 + 0.12 * pulse) * alpha), minf(wdt * (2.6 + 0.6 * pulse), _cell * 0.55))
 	if _flash.has(i):
 		col = col.lerp(Style.RED, clampf(_flash[i] / 0.5, 0.0, 1.0))
 	if _anims.has(i) and _anims[i].kind == "exit":
@@ -563,19 +609,74 @@ func _draw_arrow(i: int) -> void:
 	var d := Vector2(a.dir)
 	if pts.size() >= 2 and pts[pts.size() - 1].distance_to(pts[pts.size() - 2]) > 0.01:
 		d = (pts[pts.size() - 1] - pts[pts.size() - 2]).normalized()
+	match piece_style:
+		"comets":
+			_draw_comet(c, pts, d, col, wdt)
+		"soft":
+			_draw_soft(c, pts, d, col, wdt)
+		"colors":
+			_draw_arrow_shape(c, pts, d, col, wdt)
+		_:
+			_draw_arrow_shape(c, pts, d, col, wdt)
+
+
+## Flecha clásica: trazo con punta triangular.
+func _draw_arrow_shape(c: CanvasItem, pts: PackedVector2Array, d: Vector2, col: Color, wdt: float) -> void:
 	var perp := Vector2(-d.y, d.x)
 	var hp := pts[pts.size() - 1]
 	# El cuerpo acaba en la base de la punta, para que la punta quede limpia.
 	var body := pts.duplicate()
 	body[body.size() - 1] = hp - d * _cell * 0.12
-	_stroke(body, col, wdt)
+	_stroke(c, body, col, wdt)
 	var tip := hp + d * _cell * 0.3
 	var base := hp - d * _cell * 0.14
 	var tri := PackedVector2Array([tip, base + perp * _cell * 0.25, base - perp * _cell * 0.25])
-	board.draw_colored_polygon(tri, col)
+	c.draw_colored_polygon(tri, col)
 	var outline := tri.duplicate()
 	outline.append(tri[0])
-	board.draw_polyline(outline, col, wdt * 0.45, true)
+	c.draw_polyline(outline, col, wdt * 0.45, true)
+
+
+## Cometa: trazo que se afina hacia la cola y termina en una cabeza redonda con un brillo
+## en la parte delantera. Avanza hacia la cabeza.
+func _draw_comet(c: CanvasItem, pts: PackedVector2Array, d: Vector2, col: Color, wdt: float) -> void:
+	var total := 0.0
+	for k in pts.size() - 1:
+		total += pts[k].distance_to(pts[k + 1])
+	var step := maxf(1.5, wdt * 0.35)
+	var walked := 0.0
+	for k in pts.size() - 1:
+		var a: Vector2 = pts[k]
+		var b: Vector2 = pts[k + 1]
+		var seg := a.distance_to(b)
+		var s := 0.0
+		while s < seg:
+			var f := (walked + s) / maxf(total, 1.0)
+			var r := lerpf(wdt * 0.32, wdt * 0.62, f)
+			c.draw_circle(a.lerp(b, s / seg), r, Color(col, col.a * lerpf(0.55, 1.0, f)))
+			s += step
+		walked += seg
+	var hp := pts[pts.size() - 1]
+	var hr := maxf(wdt * 1.5, _cell * 0.27)
+	c.draw_circle(hp, hr, col)
+	c.draw_circle(hp + d * hr * 0.42, hr * 0.32, Color(1, 1, 1, 0.9 * col.a))
+
+
+## Suave: trazo limpio con la punta en forma de gota (redonda detrás, afilada delante).
+func _draw_soft(c: CanvasItem, pts: PackedVector2Array, d: Vector2, col: Color, wdt: float) -> void:
+	var hp := pts[pts.size() - 1]
+	var r := _cell * 0.26
+	var center := hp - d * r * 0.25
+	var body := pts.duplicate()
+	body[body.size() - 1] = center
+	_stroke(c, body, col, wdt)
+	var perp := Vector2(-d.y, d.x)
+	var drop := PackedVector2Array()
+	for k in 17:
+		var ang := PI * 0.5 + PI * k / 16.0  # media circunferencia trasera
+		drop.append(center + (d * cos(ang) + perp * sin(ang)) * r)
+	drop.append(center + d * r * 2.0)  # punta
+	c.draw_colored_polygon(drop, col)
 
 
 ## Fondo blanco con la silueta del tablero (unión de casillas redondeadas, sin los huecos).
@@ -609,10 +710,10 @@ func _draw_rock(c: Vector2i) -> void:
 
 
 ## Trazo con extremos y uniones redondeadas.
-func _stroke(pts: PackedVector2Array, col: Color, width: float) -> void:
-	board.draw_polyline(pts, col, width, true)
+func _stroke(c: CanvasItem, pts: PackedVector2Array, col: Color, width: float) -> void:
+	c.draw_polyline(pts, col, width, true)
 	for p in pts:
-		board.draw_circle(p, width * 0.5, col)
+		c.draw_circle(p, width * 0.5, col)
 
 
 func _burst(at: Vector2, col: Color, n: int) -> void:

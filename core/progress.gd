@@ -13,7 +13,9 @@ func _default() -> Dictionary:
 	return {"version": 2, "level": 1, "stars": {}, "scores": {}, "hints": 3, "daily": {},
 		"streak": {"last": "", "count": 0},
 		"event": {"week": -1, "count": 0, "claimed": false},
-		"settings": {"lang": "", "sound": true, "vibration": true, "music": true}}
+		"leagues": {}, "division": 0,
+		"settings": {"lang": "", "sound": true, "vibration": true, "music": true,
+			"music_volume": 0.8, "sfx_volume": 0.8, "piece_style": "arrows"}}
 
 
 func load_data() -> void:
@@ -75,6 +77,7 @@ func complete_level(level: int, star_count: int, points: int = 0) -> Dictionary:
 		bonus = 1
 		data["hints"] = hints() + 1
 	bonus += _event_progress()
+	add_league_points(points)
 	save()
 	return {"first": first, "hint_bonus": bonus, "record": record and not first}
 
@@ -127,6 +130,83 @@ func _event_progress() -> int:
 		reward = EVENT_REWARD
 	data["event"] = ev
 	return reward
+
+
+# --- Ligas ------------------------------------------------------------------------
+
+const Leagues = preload("res://game/leagues.gd")
+
+## Hora actual (unix) y zona horaria; se pueden fijar en los tests.
+var now_override := -1
+
+
+func now() -> int:
+	return now_override if now_override >= 0 else int(Time.get_unix_time_from_system())
+
+
+func tz_bias() -> int:
+	return int(Time.get_time_zone_from_system().get("bias", 0))
+
+
+## Liga en curso de un tipo, creada (y calibrada con el nivel actual) si no existía.
+func league(type: String) -> Dictionary:
+	var inst := Leagues.instance(type, now(), tz_bias())
+	var all: Dictionary = data["leagues"]
+	if not all.has(inst.key):
+		all[inst.key] = {"type": type, "start": inst.start, "end": inst.end, "points": 0,
+			"calib": Leagues.points_per_level(current_level()), "division": int(data["division"]), "claimed": false}
+	return all[inst.key]
+
+
+func add_league_points(points: int) -> void:
+	if points <= 0:
+		return
+	for type in Leagues.TYPES:
+		var lg := league(type)
+		lg["points"] = int(lg["points"]) + points
+
+
+func league_standings(lg: Dictionary, at: int = -1) -> Array:
+	var inst := {"key": "%s:%d" % [lg.type, int(lg.start)], "type": lg.type, "start": int(lg.start), "end": int(lg.end)}
+	return Leagues.standings(inst, float(lg.calib), int(lg.division), int(lg.points), now() if at < 0 else at, tr("YOU"))
+
+
+## Ligas terminadas en las que has participado y aún no has visto el resultado.
+func pending_league_results() -> Array:
+	var out := []
+	for key in data["leagues"]:
+		var lg: Dictionary = data["leagues"][key]
+		if int(lg.end) <= now() and not lg.claimed and int(lg.points) > 0:
+			var rows := league_standings(lg, int(lg.end))
+			var rank := Leagues.rank_of_you(rows)
+			out.append({"key": key, "type": lg.type, "rank": rank, "size": rows.size(),
+				"prize": Leagues.prize(lg.type, rank)})
+	return out
+
+
+## Cobra el premio de una liga terminada. En la semanal, sube o baja de división.
+## Devuelve el cambio de división (-1, 0, +1).
+func claim_league(key: String) -> int:
+	var lg: Dictionary = data["leagues"][key]
+	if lg.claimed:
+		return 0
+	lg.claimed = true
+	var rows := league_standings(lg, int(lg.end))
+	var rank := Leagues.rank_of_you(rows)
+	data["hints"] = hints() + Leagues.prize(lg.type, rank)
+	var change := 0
+	if lg.type == "weekly":
+		if rank <= Leagues.PROMOTE and int(data["division"]) < Leagues.DIVISIONS.size() - 1:
+			change = 1
+		elif rank > rows.size() - Leagues.PROMOTE and int(data["division"]) > 0:
+			change = -1
+		data["division"] = int(data["division"]) + change
+	# Limpieza: olvidar ligas de hace más de dos semanas.
+	for k in data["leagues"].keys():
+		if int(data["leagues"][k].end) < now() - 14 * 86400:
+			data["leagues"].erase(k)
+	save()
+	return change
 
 
 # --- Pistas -----------------------------------------------------------------------

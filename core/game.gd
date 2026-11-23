@@ -10,6 +10,7 @@ const MAX_LIVES := 3
 const PLAY_SCENE := "res://ui/play.tscn"
 const HOME_SCENE := "res://ui/home.tscn"
 
+var selected_league := "daily"
 var mode := "level"  # "level" o "daily"
 var level := 1
 var daily_key := ""
@@ -102,6 +103,12 @@ func restart() -> void:
 
 func next_level() -> void:
 	start_level(level + 1)
+
+
+func go_leagues(type: String = "") -> void:
+	if type != "":
+		selected_league = type
+	get_tree().change_scene_to_file("res://ui/leagues.tscn")
 
 
 func go_home() -> void:

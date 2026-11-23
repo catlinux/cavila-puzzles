@@ -56,9 +56,9 @@ static func params_for(level: int) -> Dictionary:
 
 ## Formas disponibles según el nivel: se va desbloqueando una nueva cada pocos niveles.
 static func unlocked_shapes(level: int) -> int:
-	if level < 12:
+	if level < 6:
 		return 1
-	return mini(Shapes.KINDS.size(), 2 + (level - 12) / 8)
+	return mini(Shapes.KINDS.size(), 2 + (level - 6) / 4)
 
 
 ## Parámetros del generador para una dificultad t (0..1). La semilla da a cada nivel su

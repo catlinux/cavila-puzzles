@@ -18,6 +18,13 @@ func _ready() -> void:
 	for n in range(1, 81):
 		Progress.complete_level(n, [3, 2, 3, 1, 3][n % 5])
 	Progress.complete_daily("2026-11-22")
+	for n in range(1, 81):
+		Progress.data["scores"][str(n)] = 800 + n * 37
+	Progress.add_league_points(14250)
+	Game.selected_league = "daily"
+	await _shot("res://ui/leagues.tscn", out + "/ligas.png", 0.5)
+	Game.selected_league = "weekly"
+	await _shot("res://ui/leagues.tscn", out + "/ligas_semanal.png", 0.5)
 	var home = await _shot("res://ui/home.tscn", out + "/inicio.png", 0.6)
 	home = load("res://ui/home.tscn").instantiate()
 	add_child(home)
