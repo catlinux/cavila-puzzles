@@ -14,6 +14,9 @@ se sintetiza por código. Textos en **español** y **catalán**.
   y con cadenas de dependencias más profundas. Ritmo en bloques de 10 (respiro, normales y un reto).
 - **Mundos** de 30 niveles, cada uno con su color (Alba, Marea, Ámbar, Bruma, Bosque, Ascua, Glaciar, Nébula).
 - **Evento semanal**: completa 20 niveles en la semana y gana 3 pistas.
+- Indicador de **movimientos posibles** (flechas que pueden salir en este momento).
+- **Música ambiente** y efectos zen (campanitas pentatónicas) sintetizados por código; vibración
+  suave. Todo se puede desactivar en Ajustes, donde también se puede **borrar el progreso**.
 - **3 luces** por nivel y **estrellas** según los choques (3/2/1).
 - **Pistas**: señalan la flecha libre más útil. Se ganan cada 5 niveles y con el reto diario.
 - **Reto diario** igual para todo el mundo y **racha** de días seguidos.

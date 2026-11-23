@@ -59,7 +59,8 @@ func _ready() -> void:
 	panel.add_child(vb)
 	vb.add_child(Style.label(tr("SETTINGS"), 56, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
 	_switch_row(vb, "speaker-high-fill", tr("SOUND"), "sound")
-	_switch_row(vb, "vibrate-fill", tr("VIBRATION"), "vibration")
+	_switch_row(vb, "music-notes-fill", tr("MUSIC"), "music", func(v): Sfx.set_music(v))
+	_switch_row(vb, "vibrate-fill", tr("VIBRATION"), "vibration", func(v): if v: Sfx.vibrate(15))
 	var row := _row(vb, "translate-bold", tr("LANGUAGE"))
 	var lang := PillButton.new(tr("LANG_NAME"), false, 88.0)
 	lang.font_size = 40
@@ -68,6 +69,11 @@ func _ready() -> void:
 		Game.set_language("ca" if Game.language() == "es" else "es")
 		get_tree().reload_current_scene())
 	row.add_child(lang)
+	var reset := PillButton.new(tr("RESET_PROGRESS"), false, 92.0)
+	reset.icon_name = "trash-bold"
+	reset.font_size = 40
+	reset.pressed.connect(_confirm_reset)
+	vb.add_child(reset)
 	var credits := Style.label(tr("CREDITS_TEXT"), 20, Style.SUB, "body_semi", HORIZONTAL_ALIGNMENT_CENTER)
 	credits.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credits.custom_minimum_size = Vector2(560, 0)
@@ -96,12 +102,55 @@ func _row(vb: VBoxContainer, icon: String, text: String) -> HBoxContainer:
 	return row
 
 
-func _switch_row(vb: VBoxContainer, icon: String, text: String, key: String) -> void:
+func _switch_row(vb: VBoxContainer, icon: String, text: String, key: String, extra: Callable = Callable()) -> void:
 	var row := _row(vb, icon, text)
 	var sw := Switch.new()
 	sw.accent = accent_a
 	sw.on = bool(Progress.setting(key))
 	sw.toggled.connect(func(v):
 		Progress.set_setting(key, v)
+		if extra.is_valid():
+			extra.call(v)
 		Sfx.play("tap"))
 	row.add_child(sw)
+
+
+## Confirmación antes de borrar todo el progreso.
+func _confirm_reset() -> void:
+	var layer := Control.new()
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(layer)
+	var dim := ColorRect.new()
+	dim.color = Color(Style.INK, 0.3)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(center)
+	var panel := Style.card(56, 44)
+	center.add_child(panel)
+	var vb := VBoxContainer.new()
+	vb.custom_minimum_size = Vector2(540, 0)
+	vb.add_theme_constant_override("separation", 22)
+	panel.add_child(vb)
+	var ic := TextureRect.new()
+	ic.texture = Style.icon("warning-fill", Style.RED, 84)
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	vb.add_child(ic)
+	vb.add_child(Style.label(tr("RESET_TITLE"), 50, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
+	var txt := Style.label(tr("RESET_TEXT"), 28, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER)
+	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	txt.custom_minimum_size = Vector2(520, 0)
+	vb.add_child(txt)
+	var yes := PillButton.new(tr("RESET_YES"), true, 112.0)
+	yes.font_size = 42
+	yes.set_colors(Style.RED, Color8(244, 114, 92))
+	yes.pressed.connect(func():
+		Progress.reset()
+		Game.go_home())
+	vb.add_child(yes)
+	var no := PillButton.new(tr("CANCEL"), false, 96.0)
+	no.pressed.connect(layer.queue_free)
+	vb.add_child(no)
+	Style.fade_in(layer, 0.15)

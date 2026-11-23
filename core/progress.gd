@@ -13,7 +13,7 @@ func _default() -> Dictionary:
 	return {"version": 2, "level": 1, "stars": {}, "hints": 3, "daily": {},
 		"streak": {"last": "", "count": 0},
 		"event": {"week": -1, "count": 0, "claimed": false},
-		"settings": {"lang": "", "sound": true, "vibration": true}}
+		"settings": {"lang": "", "sound": true, "vibration": true, "music": true}}
 
 
 func load_data() -> void:
@@ -23,8 +23,12 @@ func load_data() -> void:
 		if f:
 			var parsed = JSON.parse_string(f.get_as_text())
 			if parsed is Dictionary and int(parsed.get("version", 0)) == 2:
+				var defaults := _default()
 				for k in parsed:
 					data[k] = parsed[k]
+				for k in defaults["settings"]:
+					if not data["settings"].has(k):
+						data["settings"][k] = defaults["settings"][k]
 
 
 func reset() -> void:

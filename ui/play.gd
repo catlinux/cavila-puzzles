@@ -35,6 +35,9 @@ var _origin := Vector2.ZERO
 var board: Control
 var _lives_ctl: Control
 var _hint_chip: Control
+var _moves_label: Label
+## Flechas que pueden salir ahora mismo.
+var moves_available := 0
 var _progress: Control
 var _caption: Label
 var _toast: Label
@@ -88,9 +91,19 @@ func _ready() -> void:
 	vb.add_child(row)
 	_lives_ctl = Control.new()
 	_lives_ctl.custom_minimum_size = Vector2(170, 76)
-	_lives_ctl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lives_ctl.draw.connect(_draw_lives)
 	row.add_child(_lives_ctl)
+	var moves_box := HBoxContainer.new()
+	moves_box.add_theme_constant_override("separation", 10)
+	moves_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	moves_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	var moves_icon := TextureRect.new()
+	moves_icon.texture = Style.icon("hand-tap-fill", world.a, 34)
+	moves_icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	moves_box.add_child(moves_icon)
+	_moves_label = Style.label("", 26, Style.SUB, "body_bold")
+	moves_box.add_child(_moves_label)
+	row.add_child(moves_box)
 	_hint_chip = Chip.new("lightbulb-fill", Style.GOLD, str(Progress.hints()))
 	_hint_chip.pressed.connect(use_hint)
 	row.add_child(_hint_chip)
@@ -130,6 +143,7 @@ func _ready() -> void:
 
 	puzzle = Game.puzzle()
 	_prepare()
+	_update_moves()
 	if Game.mode == "level" and Game.level <= 3:
 		_caption.text = tr(["TUTORIAL_1", "TUTORIAL_2", "TUTORIAL_3"][Game.level - 1])
 		_caption.visible = true
@@ -156,6 +170,12 @@ func _prepare() -> void:
 		_exit_len.append(r)
 
 
+func _update_moves() -> void:
+	moves_available = Arrows.free_arrows(puzzle, removed).size()
+	_moves_label.text = tr("MOVES_1") if moves_available == 1 else tr("MOVES") % moves_available
+	_moves_label.visible = moves_available > 0
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		Game.go_home()
@@ -175,8 +195,9 @@ func tap_arrow(i: int) -> String:
 		_anims[i] = {"kind": "exit", "t": 0.0, "v": 7.0, "end": float(_exit_len[i] + a.cells.size() + 1)}
 		_combo = _combo + 1 if _clock - _last_exit < 1.2 else 1
 		_last_exit = _clock
-		Sfx.play("pop", 1.0 + 0.06 * mini(_combo - 1, 10))
-		Sfx.vibrate(12)
+		Sfx.play_chain(_combo - 1)
+		Sfx.vibrate(8, 0.2)
+		_update_moves()
 		_burst(_px(Vector2(Arrows.head(a))), world.a, 12)
 		if i == hint_arrow:
 			hint_arrow = -1
@@ -197,7 +218,7 @@ func tap_arrow(i: int) -> String:
 	Game.mistakes += 1
 	_lives_ctl.queue_redraw()
 	Sfx.play("bump")
-	Sfx.vibrate(60)
+	Sfx.vibrate(25, 0.45)
 	if Game.lives <= 0:
 		_lose()
 	return "bump"
@@ -242,7 +263,7 @@ func _win() -> void:
 		bonus = Progress.complete_level(Game.level, stars).hint_bonus
 	await get_tree().create_timer(0.6).timeout
 	Sfx.play("win")
-	Sfx.vibrate(30)
+	Sfx.vibrate(15, 0.3)
 	_show_result(true, stars, bonus)
 
 

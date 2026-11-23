@@ -48,7 +48,13 @@ func _run() -> void:
 	var home = await _spawn("res://ui/home.tscn")
 	home._open_settings()
 	await _frames(2)
+	home._settings._confirm_reset()
+	await _frames(2)
 	home._settings.queue_free()
+	Progress.complete_level(1, 3)
+	Progress.reset()
+	check(Progress.current_level() == 1 and Progress.total_stars() == 0 and Progress.hints() == 3, "borrar progreso")
+	check(Progress.setting("music") == true, "ajuste de música por defecto")
 	home.queue_free()
 	await _frames(1)
 
@@ -56,6 +62,7 @@ func _run() -> void:
 	for lv in [1, 2, 10, 57, 400]:
 		var v = await _play("level", lv)
 		var sol: Array = Arrows.solve(v.puzzle).order
+		check(v.moves_available == Arrows.free_arrows(v.puzzle, {}).size() and v.moves_available > 0, "nivel %d: movimientos posibles al empezar" % lv)
 		var ok := true
 		for i in sol:
 			var cell: Vector2i = v.puzzle.arrows[i].cells[0]
@@ -63,6 +70,8 @@ func _run() -> void:
 			var pos: Vector2 = v._origin + (Vector2(cell) + Vector2(0.5, 0.5)) * v._cell
 			check(v.arrow_at(pos) == i, "nivel %d: el toque encuentra la flecha %d" % [lv, i])
 			if v.tap_arrow(i) != "exit":
+				ok = false
+			if v.moves_available != Arrows.free_arrows(v.puzzle, v.removed).size():
 				ok = false
 		check(ok and v.finished and v.won, "nivel %d resuelto" % lv)
 		check(Game.lives == 3, "nivel %d sin choques" % lv)
