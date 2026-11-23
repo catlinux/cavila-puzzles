@@ -4,15 +4,17 @@ config_version=5
 [application]
 
 config/name="Cavila"
-config/description="Colección de puzles de lógica sin conexión para entrenar la mente."
-run/main_scene="res://ui/main_menu.tscn"
+config/description="Puzle de flechas: despeja el cielo tocando cada flecha en el orden correcto."
+run/main_scene="res://ui/home.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://icon.svg"
+config/quit_on_go_back=false
 
 [autoload]
 
 Progress="*res://core/progress.gd"
 Game="*res://core/game.gd"
+Sfx="*res://core/sfx.gd"
 
 [display]
 
