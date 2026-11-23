@@ -10,6 +10,20 @@ const RoundButton = preload("res://ui/widgets/round_button.gd")
 const PillButton = preload("res://ui/widgets/pill_button.gd")
 const Chip = preload("res://ui/widgets/chip.gd")
 const SettingsPanel = preload("res://ui/settings_panel.gd")
+const Leagues = preload("res://game/leagues.gd")
+
+## Colores de las ligas: relámpago, diaria y semanal (según la división).
+const LEAGUE_COLORS := {
+	"flash": [Color8(255, 122, 69), Color8(255, 176, 32)],
+	"daily": [Color8(108, 76, 245), Color8(168, 85, 247)],
+}
+const DIVISION_COLORS := [
+	[Color8(176, 112, 64), Color8(214, 150, 96)],   # bronce
+	[Color8(120, 134, 156), Color8(168, 180, 198)], # plata
+	[Color8(214, 158, 20), Color8(245, 196, 66)],   # oro
+	[Color8(13, 148, 136), Color8(45, 212, 191)],   # platino
+	[Color8(37, 99, 235), Color8(103, 232, 249)],   # diamante
+]
 
 const MONTHS := {
 	"es": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
@@ -21,6 +35,8 @@ var world: Dictionary = {}
 var _settings: Control
 var _path: Control
 var _clock := 0.0
+var _league_cards: Array = []
+var _tick := 0.0
 
 
 func _ready() -> void:
@@ -35,7 +51,7 @@ func _ready() -> void:
 	margin.add_theme_constant_override("margin_bottom", 40)
 	add_child(margin)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 34)
+	vb.add_theme_constant_override("separation", 28)
 	margin.add_child(vb)
 
 	# Cabecera.
@@ -55,11 +71,27 @@ func _ready() -> void:
 	gear.pressed.connect(_open_settings)
 	head.add_child(gear)
 
+	# Ligas, en portada: una tarjeta por liga con cuenta atrás y tu puesto.
+	var lrow := HBoxContainer.new()
+	lrow.add_theme_constant_override("separation", 16)
+	vb.add_child(lrow)
+	for t in Leagues.TYPES:
+		var lc := Control.new()
+		lc.custom_minimum_size = Vector2(0, 212)
+		lc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lc.mouse_filter = Control.MOUSE_FILTER_STOP
+		lc.draw.connect(_draw_league_card.bind(lc, t))
+		lc.gui_input.connect(func(ev):
+			if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
+				Game.go_leagues(t))
+		lrow.add_child(lc)
+		_league_cards.append(lc)
+
 	# Tarjeta del siguiente nivel.
 	var hero := Style.card(56, 40)
 	vb.add_child(hero)
 	var hv := VBoxContainer.new()
-	hv.add_theme_constant_override("separation", 26)
+	hv.add_theme_constant_override("separation", 20)
 	hero.add_child(hv)
 	var top := HBoxContainer.new()
 	hv.add_child(top)
@@ -68,7 +100,7 @@ func _ready() -> void:
 	info.add_theme_constant_override("separation", 0)
 	var wi := Levels.world_index(level)
 	info.add_child(Style.label(("%s %d · %s" % [tr("WORLD"), wi + 1, tr(world.key)]).to_upper(), 24, world.a, "body_bold"))
-	info.add_child(Style.label("%s %d" % [tr("LEVEL"), level], 86, Style.INK, "display_bold"))
+	info.add_child(Style.label("%s %d" % [tr("LEVEL"), level], 78, Style.INK, "display_bold"))
 	var in_world := (level - 1) % Levels.LEVELS_PER_WORLD
 	var puzzle := Game.puzzle_for_level(level)
 	var meta := Style.label("%d %s %d %s · %d %s" % [in_world, tr("OF"), Levels.LEVELS_PER_WORLD, tr("LEVELS_IN_WORLD"),
@@ -84,7 +116,7 @@ func _ready() -> void:
 	info.add_child(pts_row)
 	top.add_child(info)
 	var thumb := Control.new()
-	thumb.custom_minimum_size = Vector2(190, 250)
+	thumb.custom_minimum_size = Vector2(160, 206)
 	thumb.draw.connect(_draw_thumb.bind(thumb, puzzle))
 	top.add_child(thumb)
 	var track := Control.new()
@@ -96,47 +128,28 @@ func _ready() -> void:
 		Style.gradient_shape(track, Rect2(r.position, Vector2(r.size.x * f, r.size.y)), 8.0, world.a, world.b))
 	hv.add_child(track)
 	_path = Control.new()
-	_path.custom_minimum_size = Vector2(0, 116)
+	_path.custom_minimum_size = Vector2(0, 104)
 	_path.mouse_filter = Control.MOUSE_FILTER_STOP
 	_path.draw.connect(_draw_path)
 	_path.gui_input.connect(_path_input)
 	hv.add_child(_path)
-	var play := PillButton.new(tr("PLAY"), true, 122.0)
+	var play := PillButton.new(tr("PLAY"), true, 114.0)
 	play.icon_name = "play-fill"
 	play.font_size = 48
 	play.set_colors(world.a, world.b)
 	play.pressed.connect(Game.start_level.bind(level))
 	hv.add_child(play)
 
-	# Reto diario y evento semanal.
-	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", 26)
-	vb.add_child(cards)
+	# Reto diario: franja compacta.
 	var key := Daily.today_key()
-	var d0 := Time.get_date_dict_from_system()
-	var streak := Progress.streak(key)
-	var streak_txt: String = tr("STREAK_NONE") if streak == 0 else (tr("STREAK_LINE_1") if streak == 1 else tr("STREAK_LINE") % streak)
-	var daily_done := Progress.daily_done(key)
-	var daily := _small_card("calendar-blank-fill", Color8(255, 106, 85), tr("DAILY").to_upper(),
-		"%d %s" % [d0.day, MONTHS.get(Game.language(), MONTHS.es)[d0.month - 1]],
-		"check-bold" if daily_done else "fire-fill", Color8(16, 185, 129) if daily_done else Color8(255, 122, 61),
-		tr("DAILY_DONE") if daily_done else streak_txt)
+	var daily := Control.new()
+	daily.custom_minimum_size = Vector2(0, 150)
+	daily.mouse_filter = Control.MOUSE_FILTER_STOP
+	daily.draw.connect(_draw_daily_strip.bind(daily, key))
 	daily.gui_input.connect(func(ev):
 		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
 			Game.start_daily())
-	cards.add_child(daily)
-	var lg := Progress.league("daily")
-	var lg_left := int(lg.end) - Progress.now()
-	var lg_rows := Progress.league_standings(lg)
-	var lg_rank := preload("res://game/leagues.gd").rank_of_you(lg_rows)
-	var league := _small_card("crown-fill", Color8(108, 76, 245),
-		"%s · %dH" % [(tr("LEAGUE_OF") % tr("LEAGUE_DAILY")).to_upper(), lg_left / 3600],
-		(tr("RANK_OF") % [lg_rank, lg_rows.size()]) if int(lg.points) > 0 else tr("PLAY_TO_JOIN"),
-		"trophy-fill", Style.GOLD, tr("POINTS") % Style.fmt_int(int(lg.points)))
-	league.gui_input.connect(func(ev):
-		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
-			Game.go_leagues("daily"))
-	cards.add_child(league)
+	vb.add_child(daily)
 	Style.fade_in(self)
 	_show_league_results()
 
@@ -186,45 +199,14 @@ func _show_league_results() -> void:
 	Sfx.play("win")
 
 
-func _small_card(icon: String, tint: Color, kicker: String, title: String, foot_icon: String, foot_col: Color, foot: String) -> PanelContainer:
-	var c := Style.card(44, 30)
-	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	c.custom_minimum_size = Vector2(0, 300)
-	c.mouse_filter = Control.MOUSE_FILTER_STOP
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 6)
-	c.add_child(v)
-	var ic := Control.new()
-	ic.custom_minimum_size = Vector2(76, 76)
-	ic.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	ic.draw.connect(func():
-		Style.fill_round(ic, Rect2(Vector2.ZERO, Vector2(76, 76)), 22.0, Color(tint, 0.13), 6)
-		var t := Style.icon(icon, tint, 40)
-		ic.draw_texture(t, Vector2(18, 18)))
-	v.add_child(ic)
-	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 10)
-	v.add_child(gap)
-	v.add_child(Style.label(kicker, 21, Style.SUB, "body_bold"))
-	var t := Style.label(title, 40, Style.INK, "display")
-	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	t.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	t.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	v.add_child(t)
-	var foot_row := HBoxContainer.new()
-	foot_row.add_theme_constant_override("separation", 8)
-	var fi := TextureRect.new()
-	fi.texture = Style.icon(foot_icon, foot_col, 28)
-	fi.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
-	foot_row.add_child(fi)
-	foot_row.add_child(Style.label(foot, 24, Style.SUB, "body"))
-	v.add_child(foot_row)
-	return c
-
-
 func _process(delta: float) -> void:
 	_clock += delta
 	_path.queue_redraw()
+	_tick += delta
+	if _tick >= 1.0:  # cuenta atrás de las ligas
+		_tick = 0.0
+		for c in _league_cards:
+			c.queue_redraw()
 
 
 func _notification(what: int) -> void:
@@ -243,6 +225,65 @@ func _open_settings() -> void:
 
 
 # --- Dibujo -----------------------------------------------------------------------
+
+func _league_colors(t: String) -> Array:
+	if t == "weekly":
+		return DIVISION_COLORS[int(Progress.data.division)]
+	return LEAGUE_COLORS[t]
+
+
+## Tarjeta de liga: icono, nombre, cuenta atrás y tu puesto (o invitación a entrar).
+func _draw_league_card(c: Control, t: String) -> void:
+	var cols := _league_colors(t)
+	var r := Rect2(Vector2(2, 2), c.size - Vector2(4, 14))
+	Style.soft_shadow(c, r, 34.0, Color(cols[0], 0.35), 12.0, Vector2(0, 8))
+	Style.gradient_shape(c, r, 34.0, cols[0], cols[1])
+	var lg := Progress.league(t)
+	var icon_name: String = {"flash": "lightning-fill", "daily": "calendar-check-fill", "weekly": "medal-fill"}[t]
+	c.draw_texture(Style.icon(icon_name, Color.WHITE, 40), r.position + Vector2(20, 18))
+	var name: String = tr("LEAGUE_" + t.to_upper())
+	if t == "weekly":
+		name = tr(Leagues.DIVISIONS[int(Progress.data.division)])
+	c.draw_string(Style.font("display"), r.position + Vector2(20, 96), name, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 30, 28, Color.WHITE)
+	var left := maxi(0, int(lg.end) - Progress.now())
+	var h := left / 3600
+	var time_txt := ("%dd %dh" % [h / 24, h % 24]) if h >= 24 else ("%d:%02d:%02d" % [h, (left % 3600) / 60, left % 60])
+	c.draw_string(Style.font("body_bold"), r.position + Vector2(20, 128), time_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 1, 1, 0.9))
+	var big := "—"
+	if int(lg.points) > 0:
+		var rows := Progress.league_standings(lg)
+		big = "%d.º" % Leagues.rank_of_you(rows)
+	c.draw_string(Style.font("display_bold"), r.position + Vector2(20, 176), big, HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color.WHITE)
+	if int(lg.points) > 0:
+		var tw := Style.text_width(big, 40, "display_bold")
+		c.draw_string(Style.font("body_bold"), r.position + Vector2(26 + tw, 176), "/%d" % int(Leagues.CONFIG[t].size), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 1, 1, 0.85))
+
+
+## Franja del reto diario: icono, fecha, racha y botón.
+func _draw_daily_strip(c: Control, key: String) -> void:
+	var r := Rect2(Vector2(2, 2), c.size - Vector2(4, 14))
+	Style.soft_shadow(c, r, 40.0, Style.SHADOW, 16.0, Vector2(0, 10))
+	Style.fill_round(c, r, 40.0, Style.CARD)
+	var tint := Color8(255, 106, 85)
+	Style.fill_round(c, Rect2(r.position + Vector2(24, (r.size.y - 76) / 2.0), Vector2(76, 76)), 22.0, Color(tint, 0.13), 6)
+	c.draw_texture(Style.icon("calendar-blank-fill", tint, 40), r.position + Vector2(42, r.size.y / 2.0 - 20))
+	var d0 := Time.get_date_dict_from_system()
+	var done := Progress.daily_done(key)
+	c.draw_string(Style.font("body_bold"), r.position + Vector2(124, r.size.y / 2.0 - 12), tr("DAILY").to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 21, Style.SUB)
+	c.draw_string(Style.font("display"), r.position + Vector2(124, r.size.y / 2.0 + 28), "%d %s" % [d0.day, MONTHS.get(Game.language(), MONTHS.es)[d0.month - 1]],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 36, Style.INK)
+	var streak := Progress.streak(key)
+	var pill := Rect2(Vector2(r.end.x - 196, r.get_center().y - 34), Vector2(172, 68))
+	if done:
+		c.draw_texture(Style.icon("check-bold", Color8(16, 185, 129), 34), Vector2(pill.position.x + 20, pill.get_center().y - 17))
+		c.draw_string(Style.font("display"), Vector2(pill.position.x + 62, pill.get_center().y + 10), tr("DAILY_DONE"), HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color8(16, 185, 129))
+	else:
+		Style.gradient_shape(c, pill, 34.0, tint, Color8(255, 154, 61))
+		Style.text_at(c, pill.get_center(), tr("DAILY_GO"), 30, Color.WHITE)
+	if streak > 0:
+		var fx := r.position.x + 124 + Style.text_width("%d %s" % [d0.day, MONTHS.get(Game.language(), MONTHS.es)[d0.month - 1]], 36, "display") + 22
+		c.draw_texture(Style.icon("fire-fill", Color8(255, 122, 61), 28), Vector2(fx, r.size.y / 2.0 + 2))
+		c.draw_string(Style.font("display"), Vector2(fx + 32, r.size.y / 2.0 + 26), str(streak), HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color8(255, 122, 61))
 
 ## Marca: flecha que gira hacia arriba sobre una placa con el degradado del mundo.
 func _draw_mark(c: Control) -> void:
