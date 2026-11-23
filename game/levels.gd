@@ -105,7 +105,25 @@ static func params_from(t: float, seed_value: int = 0, shapes: int = 1, level: i
 		"fill_pass": lerpf(0.0, 4.0, smoothstep(0.05, 0.4, t)),
 		"extend_rounds": int(round(lerpf(0.0, 4.0, smoothstep(0.05, 0.4, t)))),
 		"candidates": 3,
+		# Modo laberinto: flechas muy largas que llenan todo el tablero.
+		"maze": _is_maze(level, t, rng),
+		"maze_min": int(round(lerpf(4.0, 10.0, t))),
+		"maze_max": int(round(lerpf(14.0, 70.0, t))),
+		"maze_turn": 0.35,
+		"maze_greed": lerpf(0.5, 0.85, t),
 	}
+
+
+## ¿Es un nivel laberinto? Nunca antes del 15; desde el 20, todos los niveles reto; y el
+## resto, al azar con una probabilidad que crece con la dificultad.
+static func _is_maze(level: int, t: float, rng: RandomNumberGenerator) -> bool:
+	if level == 0:
+		return rng.randf() < 0.5  # reto diario
+	if level < 15:
+		return false
+	if level >= 20 and beat(level) == 2:
+		return true
+	return rng.randf() < lerpf(0.15, 0.4, t)
 
 
 static func seed_for(level: int) -> int:

@@ -20,7 +20,7 @@ static func difficulty(date_key: String) -> float:
 
 
 static func params_for(date_key: String) -> Dictionary:
-	return Levels.params_from(difficulty(date_key), seed_for(date_key), 6)
+	return Levels.params_from(difficulty(date_key), seed_for(date_key), 6, 0)
 
 
 static func world_for(date_key: String) -> Dictionary:

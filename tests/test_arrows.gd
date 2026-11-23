@@ -71,7 +71,8 @@ func run() -> void:
 		var cov := 0
 		for a in g.arrows:
 			cov += a.cells.size()
-			check(a.cells.size() <= maxi(int(par.max_len * 1.4), par.snake_max), "longitud máxima " + tag)
+			var cap: int = par.maze_max + 4 if g.get("maze", false) else maxi(int(par.max_len * 1.4), par.snake_max)
+			check(a.cells.size() <= cap, "longitud máxima " + tag)
 		var playable: int = g.w * g.h - g.holes.size() - g.rocks.size()
 		check(float(cov) / playable >= (0.6 if lv < 10 else 0.85), "tablero bien lleno " + tag + " (%.2f)" % (float(cov) / playable))
 		# Reproducir la solución tocando flechas una a una.
@@ -115,6 +116,29 @@ func run() -> void:
 		if mx >= 18 and mn <= 4:
 			long_ok += 1
 	check(long_ok >= 3, "serpientes largas y flechas cortas en niveles altos (%d/4)" % long_ok)
+	# Modo laberinto: flechas muy largas, tablero lleno y siempre resoluble.
+	var mazes := 0
+	for lv in [20, 30, 120, 250, 500, 1000, 2000]:
+		var par := Levels.params_for(lv)
+		check(par.maze, "nivel %d (reto) es laberinto" % lv)
+		var g := Arrows.generate(Levels.seed_for(lv), par)
+		check(g.get("maze", false) and Arrows.validate(g).ok and Arrows.solve(g).solvable, "laberinto %d válido y resoluble" % lv)
+		var tot := 0
+		var mx := 0
+		for a in g.arrows:
+			tot += a.cells.size()
+			mx = maxi(mx, a.cells.size())
+		var playable: int = g.w * g.h - g.holes.size() - g.rocks.size()
+		check(float(tot) / playable >= 0.97, "laberinto %d lleno (%.2f)" % [lv, float(tot) / playable])
+		check(float(tot) / g.arrows.size() >= 6.0 and mx >= 14, "laberinto %d con flechas largas (media %.1f, máx %d)" % [lv, float(tot) / g.arrows.size(), mx])
+		mazes += 1
+	check(not Levels.params_for(14).maze and not Levels.params_for(10).maze, "sin laberintos antes del 15")
+	var count := 0
+	for lv in range(100, 300):
+		if Levels.params_for(lv).maze:
+			count += 1
+	check(count > 30 and count < 140, "proporción de laberintos razonable (%d de 200)" % count)
+
 	# Puntuación y rival.
 	check(Levels.score(50, 0.5, 30.0, 3, 0, 60.0) > Levels.score(50, 0.5, 90.0, 3, 0, 60.0), "más rápido, más puntos")
 	check(Levels.score(50, 0.5, 30.0, 3, 0, 60.0) > Levels.score(50, 0.5, 30.0, 1, 0, 60.0), "menos errores, más puntos")

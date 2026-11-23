@@ -170,6 +170,10 @@ static func validate(p: Dictionary) -> Dictionary:
 ## params: w, h, min_len, max_len, turn, coverage, target_depth, candidates
 ## Genera varios candidatos y se queda con el de profundidad más cercana al objetivo.
 static func generate(seed_value: int, params: Dictionary) -> Dictionary:
+	if params.get("maze", false):
+		var m := generate_maze(seed_value, params)
+		if not m.is_empty():
+			return m
 	var best := {}
 	var best_score := INF
 	for k in params.get("candidates", 4):
@@ -511,3 +515,250 @@ static func _extend_tails(rng: RandomNumberGenerator, p: Dictionary, st: Diction
 				grew = true
 		if not grew:
 			break
+
+
+# --- Modo laberinto: flechas muy largas que llenan todo el tablero ------------------
+
+## Genera un tablero "laberinto": primero se cubre el tablero con caminos largos y
+## serpenteantes (como los pasillos de un laberinto) y después se decide hacia qué extremo
+## apunta cada uno simulando la partida al revés: se va retirando una pieza que pueda salir
+## y se fija su punta en ese momento. Ese orden es una solución, así que el tablero siempre
+## se puede resolver. Para que sea difícil, se elige la punta que tenga que esperar a más
+## piezas (las ya retiradas que hay en su camino de salida).
+static func generate_maze(seed_value: int, params: Dictionary) -> Dictionary:
+	var best := {}
+	var best_score := INF
+	for k in params.get("candidates", 3):
+		var rng := Rng.make(Rng.derive(seed_value, 500 + k))
+		var p := _maze_build(rng, params)
+		var s := solve(p)
+		if not s.solvable or p.arrows.size() < 2:
+			continue
+		var free_frac: float = float(s.free0) / p.arrows.size()
+		var score: float = absf(s.layers - params.get("target_depth", 20)) * 1.0 + free_frac * 60.0
+		if score < best_score:
+			best_score = score
+			best = p
+			best["depth"] = s.layers
+	return best
+
+
+static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary:
+	var w: int = params.w
+	var h: int = params.h
+	var p := {"w": w, "h": h, "arrows": [], "holes": params.get("holes", []), "rocks": params.get("rocks", []),
+		"shape": params.get("shape", "rect"), "maze": true}
+	var blocked := PackedByteArray()
+	blocked.resize(w * h)
+	for c in p.holes:
+		blocked[c.y * w + c.x] = 1
+	var rock := PackedByteArray()
+	rock.resize(w * h)
+	for c in p.rocks:
+		blocked[c.y * w + c.x] = 1
+		rock[c.y * w + c.x] = 1
+	var paths := _path_cover(rng, w, h, blocked, params.get("maze_min", 6), params.get("maze_max", 40), params.get("maze_turn", 0.35))
+	# Simulación inversa: occ = piezas que siguen en el tablero; gone = de qué pieza retirada
+	# era cada casilla (para contar dependencias).
+	var occ := PackedInt32Array()
+	occ.resize(w * h)
+	occ.fill(-1)
+	for i in paths.size():
+		for c in paths[i]:
+			occ[c.y * w + c.x] = i
+	var gone := PackedInt32Array()
+	gone.resize(w * h)
+	gone.fill(-1)
+	var remaining := {}
+	for i in paths.size():
+		remaining[i] = true
+	var greed: float = params.get("maze_greed", 0.8)
+	var guard := 20000
+	var splits := 0
+	while not remaining.is_empty() and guard > 0:
+		guard -= 1
+		var cands := []
+		for i in remaining:
+			var cells: Array = paths[i]
+			for rev in [false, true]:
+				var hd: Vector2i = cells[0] if rev else cells[cells.size() - 1]
+				var prev: Vector2i = cells[1] if rev else cells[cells.size() - 2]
+				var d: Vector2i = hd - prev
+				var c: Vector2i = hd + d
+				var ok := true
+				var deps := {}
+				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+					var k := c.y * w + c.x
+					if occ[k] != -1 or rock[k] == 1:
+						ok = false
+						break
+					if gone[k] != -1:
+						deps[gone[k]] = true
+					c += d
+				if ok:
+					cands.append([i, rev, deps.size() + rng.randf() * 0.5])
+		if cands.is_empty():
+			# Nadie puede salir: se busca el corte que deja salir el trozo más largo posible
+			# (el extremo nuevo que crea el corte apunta a una zona libre).
+			var best_cut := []
+			var tried := 0
+			for i in remaining:
+				var cells2: Array = paths[i]
+				if cells2.size() < 4:
+					continue
+				tried += 1
+				if tried > 40:
+					break
+				for k in range(2, cells2.size() - 1):
+					# Trozo A = [0, k) con la punta en k-1; trozo B = [k, fin) con la punta en k.
+					for side in 2:
+						var hd: Vector2i = cells2[k - 1] if side == 0 else cells2[k]
+						var prev: Vector2i = cells2[k - 2] if side == 0 else cells2[k + 1]
+						var d: Vector2i = hd - prev
+						var c: Vector2i = hd + d
+						var ok := true
+						while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+							var kk := c.y * w + c.x
+							if occ[kk] != -1 or rock[kk] == 1:
+								ok = false
+								break
+							c += d
+						if ok:
+							var piece_len: int = k if side == 0 else cells2.size() - k
+							if best_cut.is_empty() or piece_len > best_cut[2]:
+								best_cut = [i, k, piece_len]
+			if best_cut.is_empty():
+				break
+			splits += 1
+			var li: int = best_cut[0]
+			var cells4: Array = paths[li]
+			var tail_part := cells4.slice(best_cut[1])
+			paths[li] = cells4.slice(0, best_cut[1])
+			paths.append(tail_part)
+			var ni := paths.size() - 1
+			for cc in tail_part:
+				occ[cc.y * w + cc.x] = ni
+			remaining[ni] = true
+			continue
+		var pick: Array
+		if rng.randf() < greed:
+			cands.sort_custom(func(a, b): return a[2] > b[2])
+			pick = cands[rng.randi() % mini(3, cands.size())]
+		else:
+			pick = cands[rng.randi() % cands.size()]
+		var idx: int = pick[0]
+		var cells3: Array = paths[idx].duplicate()
+		if pick[1]:
+			cells3.reverse()
+		p.arrows.append({"cells": cells3, "dir": cells3[cells3.size() - 1] - cells3[cells3.size() - 2]})
+		var ai: int = p.arrows.size() - 1
+		for cc in cells3:
+			occ[cc.y * w + cc.x] = -1
+			gone[cc.y * w + cc.x] = ai
+		remaining.erase(idx)
+	p["splits"] = splits
+	p["stuck"] = remaining.size()
+	return p
+
+
+## Cubre el tablero con caminos largos y serpenteantes. Cada camino crece por sus dos
+## extremos eligiendo casi siempre la casilla vecina con menos salidas libres (regla de
+## Warnsdorff), lo que evita dejar huecos aislados. Las casillas sueltas que quedan se pegan
+## al extremo de un camino vecino.
+static func _path_cover(rng: RandomNumberGenerator, w: int, h: int, blocked: PackedByteArray,
+		lmin: int, lmax: int, turn: float) -> Array:
+	var used := blocked.duplicate()
+	var paths := []
+	var order := []
+	for i in w * h:
+		if used[i] == 0:
+			order.append(i)
+	Rng.shuffle(order, rng)
+	var remaining := order.size()
+	while remaining > 0:
+		# Empezar por una casilla con pocas salidas (rincones y huecos estrechos).
+		var start := -1
+		var best_deg := 5
+		for i in order:
+			if used[i] == 0:
+				var dg := _free_deg(used, w, h, i)
+				if dg < best_deg:
+					best_deg = dg
+					start = i
+					if dg <= 1:
+						break
+		var target := rng.randi_range(lmin, lmax)
+		var path := [Vector2i(start % w, start / w)]
+		used[start] = 1
+		remaining -= 1
+		for end in 2:
+			var last_step := Vector2i.ZERO
+			while path.size() < target:
+				var cur: Vector2i = path[path.size() - 1] if end == 0 else path[0]
+				var opts := []
+				for d in DIRS:
+					var n: Vector2i = cur + d
+					if n.x < 0 or n.y < 0 or n.x >= w or n.y >= h or used[n.y * w + n.x] == 1:
+						continue
+					opts.append([n, d, _free_deg(used, w, h, n.y * w + n.x)])
+				if opts.is_empty():
+					break
+				var pick: Array = opts[rng.randi() % opts.size()]
+				var r := rng.randf()
+				if r < 0.65:
+					opts.sort_custom(func(a, b): return a[2] < b[2])
+					pick = opts[0]
+				elif r < 0.65 + (1.0 - turn) * 0.35:
+					for o in opts:
+						if o[1] == last_step:
+							pick = o
+				var n2: Vector2i = pick[0]
+				used[n2.y * w + n2.x] = 1
+				remaining -= 1
+				last_step = pick[1]
+				if end == 0:
+					path.append(n2)
+				else:
+					path.insert(0, n2)
+		paths.append(path)
+	# Casillas sueltas: pegarlas al extremo de un camino vecino.
+	var owner := {}
+	for i in paths.size():
+		owner[paths[i][0]] = i
+		owner[paths[i][paths[i].size() - 1]] = i
+	var out := []
+	for i in paths.size():
+		if paths[i].size() >= 2:
+			continue
+		var c: Vector2i = paths[i][0]
+		for d in DIRS:
+			var n: Vector2i = c + d
+			if owner.has(n) and owner[n] != i and paths[owner[n]].size() >= 2:
+				var j: int = owner[n]
+				if paths[j][0] == n:
+					paths[j].insert(0, c)
+				else:
+					paths[j].append(c)
+				owner.erase(n)
+				owner[c] = j
+				paths[i] = []
+				break
+	for pth in paths:
+		if pth.size() >= 2:
+			out.append(pth)
+	return out
+
+
+static func _free_deg(used: PackedByteArray, w: int, h: int, i: int) -> int:
+	var x := i % w
+	var y := i / w
+	var n := 0
+	if x > 0 and used[i - 1] == 0:
+		n += 1
+	if x < w - 1 and used[i + 1] == 0:
+		n += 1
+	if y > 0 and used[i - w] == 0:
+		n += 1
+	if y < h - 1 and used[i + w] == 0:
+		n += 1
+	return n

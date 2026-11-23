@@ -23,6 +23,7 @@ const STRINGS := {
 	"WORLD_GLACIAR": ["Glaciar", "Glacera"],
 	"WORLD_NEBULA": ["Nébula", "Nebulosa"],
 	"CHALLENGE": ["Reto", "Repte"],
+	"MAZE": ["Laberinto", "Laberint"],
 	"BREATHER": ["Respiro", "Respir"],
 	"WIN": ["¡Cielo despejado!", "Cel serè!"],
 	"LOSE": ["Sin luces", "Sense llums"],

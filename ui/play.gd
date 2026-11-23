@@ -104,6 +104,8 @@ func _ready() -> void:
 		sub_text = "%s %d · %s" % [tr("WORLD"), Levels.world_index(Game.level) + 1, tr(world.key)]
 		if Levels.beat(Game.level) == 2:
 			sub_text += " · " + tr("CHALLENGE")
+		if Levels.params_for(Game.level).maze:
+			sub_text += " · " + tr("MAZE")
 	titles.add_child(Style.label(title_text, 50, Style.INK, "display", HORIZONTAL_ALIGNMENT_CENTER))
 	titles.add_child(Style.label(sub_text.to_upper(), 23, Style.SUB, "body_bold", HORIZONTAL_ALIGNMENT_CENTER))
 	top.add_child(titles)

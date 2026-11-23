@@ -15,6 +15,10 @@ se sintetiza por código. Textos en **español** y **catalán**.
   Ritmo en bloques de 10 (respiro, normales y un reto).
 - **Tableros variados** (desde el nivel 6, una forma nueva cada 4 niveles): rectángulo, esquinas recortadas, óvalo, rombo, cruz, anillo, reloj de arena,
   escalones y tableros con **rocas** que bloquean el paso. Se desbloquean poco a poco.
+- **Niveles laberinto** (desde el 15; todos los niveles reto desde el 20): flechas larguísimas que
+  serpentean y llenan todo el tablero. Se generan cubriendo el tablero con caminos largos (regla de
+  Warnsdorff) y fijando la punta de cada uno con una simulación inversa de la partida, lo que
+  garantiza la solución.
 - **Zoom** pellizcando y desplazamiento arrastrando en los tableros grandes.
 - **Puntuación** por nivel (flechas, dificultad, errores, combos y rapidez) con récord personal, y un
   **rival de la máquina** que avanza a su ritmo mientras juegas.
