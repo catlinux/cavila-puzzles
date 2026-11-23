@@ -68,3 +68,27 @@ jobs:
         with:
           name: cavila-debug-apk
           path: build/cavila.apk
+
+  # Publica el APK en una release fija llamada "latest": el enlace de descarga directa es
+  # siempre el mismo y apunta a la última versión compilada.
+  publish:
+    needs: apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cavila-debug-apk
+          path: build
+      - name: Actualizar la release "latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest build/cavila.apk \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --title "Cavila (última versión de prueba)" \
+            --notes "APK de depuración compilado automáticamente desde la rama ${{ github.ref_name }} (commit ${{ github.sha }})."
