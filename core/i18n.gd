@@ -36,6 +36,7 @@ const STRINGS := {
 	"RETRY": ["Reintentar", "Torna-ho a provar"],
 	"REPLAY": ["Repetir", "Repeteix"],
 	"HOME": ["Inicio", "Inici"],
+	"HINTS_FULL": ["Ya tienes el máximo de pistas (%d)", "Ja tens el màxim de pistes (%d)"],
 	"NO_HINTS": ["No te quedan pistas", "No et queden pistes"],
 	"HINT_BONUS": ["+%d pista", "+%d pista"],
 	"HINT_BONUS_N": ["+%d pistas", "+%d pistes"],

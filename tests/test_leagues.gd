@@ -66,12 +66,13 @@ func run() -> void:
 	pr.now_override = now + 8 * 86400  # han terminado las tres
 	var pend: Array = pr.pending_league_results()
 	check(pend.size() == 3, "tres ligas terminadas (%d)" % pend.size())
+	pr.data["hints"] = 0
 	var hints0: int = pr.hints()
 	var promoted := 0
 	for r in pend:
 		check(r.rank == 1, "primero en %s" % r.type)
 		promoted += pr.claim_league(r.key)
-	check(pr.hints() == hints0 + 3 + 4 + 8, "premios cobrados")
+	check(pr.hints() == mini(hints0 + 3 + 4 + 8, ProgressScript.MAX_HINTS), "premios cobrados sin pasar del máximo (%d)" % pr.hints())
 	check(promoted == 1 and int(pr.data.division) == 1, "asciende de división")
 	check(pr.pending_league_results().is_empty() and pr.claim_league(pend[0].key) == 0, "no se cobra dos veces")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

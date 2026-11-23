@@ -638,7 +638,7 @@ func _draw_arrow(c: CanvasItem, i: int) -> void:
 	var alpha := 1.0
 	if _anims.has(i) and _anims[i].kind == "exit" and t > _exit_len[i]:
 		alpha = clampf(1.0 - (t - _exit_len[i]) / (a.cells.size() + 1.0), 0.0, 1.0)
-	var pts := _window(i, t)
+	var pts := _round_corners(_window(i, t), _cell * CORNER_RADIUS)
 	var col: Color = Style.INK
 	var wdt := maxf(3.0, _cell * 0.15)
 	if piece_style == "colors":
@@ -762,11 +762,48 @@ func _draw_rock(c: Vector2i) -> void:
 	board.draw_line(o + Vector2(0.3, 0.6) * s, o + Vector2(0.42, 0.8) * s, Color8(100, 110, 130), maxf(1.0, _cell * 0.05), true)
 
 
-## Trazo con extremos y uniones redondeadas.
+## Trazo con extremos redondeados (las esquinas ya vienen suavizadas con _round_corners).
 func _stroke(c: CanvasItem, pts: PackedVector2Array, col: Color, width: float) -> void:
 	c.draw_polyline(pts, col, width, true)
-	for p in pts:
-		c.draw_circle(p, width * 0.5, col)
+	if pts.size() > 0:
+		c.draw_circle(pts[0], width * 0.5, col)
+		c.draw_circle(pts[pts.size() - 1], width * 0.5, col)
+
+
+## Radio de las curvas, en casillas (0.5 = el máximo: el giro ocupa media casilla).
+const CORNER_RADIUS := 0.42
+
+
+## Sustituye cada esquina del recorrido por un arco (curva de Bézier cuadrática), sin pasar
+## de la mitad de los tramos vecinos. Los tramos rectos no se tocan.
+func _round_corners(pts: PackedVector2Array, radius: float) -> PackedVector2Array:
+	if pts.size() < 3 or radius < 1.5:
+		return pts
+	var out := PackedVector2Array([pts[0]])
+	for k in range(1, pts.size() - 1):
+		var a := pts[k - 1]
+		var b := pts[k]
+		var c := pts[k + 1]
+		var d1 := (b - a)
+		var d2 := (c - b)
+		var l1 := d1.length()
+		var l2 := d2.length()
+		if l1 < 0.01 or l2 < 0.01:
+			continue
+		d1 /= l1
+		d2 /= l2
+		if absf(d1.cross(d2)) < 0.01:  # tramo recto: no hay esquina
+			out.append(b)
+			continue
+		var r := minf(radius, minf(l1, l2) * 0.5)
+		var p0 := b - d1 * r
+		var p2 := b + d2 * r
+		var steps := 6
+		for s in range(steps + 1):
+			var t := float(s) / steps
+			out.append((1.0 - t) * (1.0 - t) * p0 + 2.0 * (1.0 - t) * t * b + t * t * p2)
+	out.append(pts[pts.size() - 1])
+	return out
 
 
 func _burst(at: Vector2, col: Color, n: int) -> void:

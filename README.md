@@ -35,7 +35,8 @@ se sintetiza por código. Textos en **español** y **catalán**.
   pentatónicas), todo sintetizado por código, con volumen ajustable; vibración
   suave. Todo se puede desactivar en Ajustes, donde también se puede **borrar el progreso**.
 - **3 luces** por nivel y **estrellas** según los choques (3/2/1).
-- **Pistas**: señalan la flecha libre más útil. Se ganan cada 5 niveles y con el reto diario.
+- **Pistas**: señalan la flecha libre más útil. Se ganan cada 5 niveles, en niveles súper difíciles y
+  extra y con el reto diario; **se pueden guardar 5 como máximo**.
 - **Reto diario** igual para todo el mundo y **racha** de días seguidos.
 - Inicio con el siguiente nivel en grande (miniatura del tablero y camino de niveles), animaciones,
   sonido sintetizado y vibración.

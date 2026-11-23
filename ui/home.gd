@@ -196,9 +196,13 @@ func _show_league_results() -> void:
 	vb.add_child(ic)
 	vb.add_child(Style.label(tr("LEAGUE_END") % tr("LEAGUE_" + String(res.type).to_upper()).to_lower(), 44, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
 	vb.add_child(Style.label(tr("YOUR_RANK") % [res.rank, res.size], 34, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER))
-	if res.prize > 0:
-		vb.add_child(Style.label((tr("HINT_BONUS") if res.prize == 1 else tr("HINT_BONUS_N")) % res.prize, 38, Style.GOLD, "display", HORIZONTAL_ALIGNMENT_CENTER))
+	var hints_before := Progress.hints()
 	var change := Progress.claim_league(res.key)
+	var got := Progress.hints() - hints_before
+	if got > 0:
+		vb.add_child(Style.label((tr("HINT_BONUS") if got == 1 else tr("HINT_BONUS_N")) % got, 38, Style.GOLD, "display", HORIZONTAL_ALIGNMENT_CENTER))
+	elif res.prize > 0:
+		vb.add_child(Style.label(tr("HINTS_FULL") % Progress.MAX_HINTS, 28, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER))
 	if change != 0:
 		var div_name: String = tr(preload("res://game/leagues.gd").DIVISIONS[int(Progress.data.division)])
 		vb.add_child(Style.label((tr("PROMOTED") if change > 0 else tr("DEMOTED")) % div_name, 34,

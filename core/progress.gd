@@ -78,8 +78,7 @@ func complete_level(level: int, star_count: int, points: int = 0) -> Dictionary:
 	if first:
 		# Premio extra la primera vez que se supera un nivel súper difícil o extra.
 		bonus += {"super": 1, "extra": 2}.get(preload("res://game/levels.gd").tier(level), 0)
-	data["hints"] = hints() + bonus
-	bonus += _event_progress()
+	bonus = add_hints(bonus) + _event_progress()
 	add_league_points(points)
 	save()
 	return {"first": first, "hint_bonus": bonus, "record": record and not first}
@@ -129,8 +128,7 @@ func _event_progress() -> int:
 	var reward := 0
 	if int(ev["count"]) >= EVENT_GOAL and not ev["claimed"]:
 		ev["claimed"] = true
-		data["hints"] = hints() + EVENT_REWARD
-		reward = EVENT_REWARD
+		reward = add_hints(EVENT_REWARD)
 	data["event"] = ev
 	return reward
 
@@ -196,7 +194,7 @@ func claim_league(key: String) -> int:
 	lg.claimed = true
 	var rows := league_standings(lg, int(lg.end))
 	var rank := Leagues.rank_of_you(rows)
-	data["hints"] = hints() + Leagues.prize(lg.type, rank)
+	add_hints(Leagues.prize(lg.type, rank))
 	var change := 0
 	if lg.type == "weekly":
 		if rank <= Leagues.PROMOTE and int(data["division"]) < Leagues.DIVISIONS.size() - 1:
@@ -214,8 +212,19 @@ func claim_league(key: String) -> int:
 
 # --- Pistas -----------------------------------------------------------------------
 
+## Máximo de pistas que se pueden guardar.
+const MAX_HINTS := 5
+
+
 func hints() -> int:
-	return int(data["hints"])
+	return mini(int(data["hints"]), MAX_HINTS)
+
+
+## Suma pistas sin pasar del máximo. Devuelve las que se han añadido de verdad.
+func add_hints(n: int) -> int:
+	var before := hints()
+	data["hints"] = mini(before + maxi(n, 0), MAX_HINTS)
+	return int(data["hints"]) - before
 
 
 func use_hint() -> bool:
@@ -243,9 +252,9 @@ func complete_daily(date_key: String) -> Dictionary:
 	elif last != date_key:
 		data["streak"]["count"] = 1
 	data["streak"]["last"] = date_key
-	data["hints"] = hints() + 2
+	var got := add_hints(2)
 	save()
-	return {"hint_bonus": 2}
+	return {"hint_bonus": got}
 
 
 ## Racha vigente a fecha `today` (se pierde si ayer no se jugó).
