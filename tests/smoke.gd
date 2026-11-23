@@ -150,6 +150,37 @@ func _run() -> void:
 	vz.queue_free()
 	await _frames(1)
 
+	# Tolerancia de toque: entre una flecha que chocaría y otra libre casi igual de cerca,
+	# gana la libre; tocar el centro de una bloqueada sigue siendo un choque.
+	var vt = await _play("level", 300)
+	vt._layout()
+	var occ: PackedInt32Array = Arrows.occupancy(vt.puzzle)
+	var pair := []
+	for i in vt.puzzle.arrows.size():
+		if pair.size() > 0:
+			break
+		if Arrows.can_exit(vt.puzzle, i, occ):
+			continue
+		for c in vt.puzzle.arrows[i].cells:
+			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var n: Vector2i = c + d
+				if Arrows.inside(vt.puzzle, n):
+					var j: int = occ[n.y * vt.puzzle.w + n.x]
+					if j >= 0 and j != i and Arrows.can_exit(vt.puzzle, j, occ) and pair.is_empty():
+						pair = [i, j, c, n]
+	check(not pair.is_empty(), "hay una flecha bloqueada junto a una libre")
+	if not pair.is_empty():
+		var cb: Vector2 = Vector2(pair[2]) + Vector2(0.5, 0.5)
+		var cf: Vector2 = Vector2(pair[3]) + Vector2(0.5, 0.5)
+		var edge: Vector2 = vt._origin + cb.lerp(cf, 0.42) * vt._cell  # algo más cerca de la bloqueada
+		check(vt.arrow_at(edge) == pair[1], "toque dudoso: se elige la flecha que puede salir")
+		var center: Vector2 = vt._origin + cb * vt._cell
+		check(vt.arrow_at(center) == pair[0], "toque claro en una bloqueada: cuenta como esa (sin abusos)")
+		var far: Vector2 = vt._origin + (cb + Vector2(0, 0) + (cb - cf) * 0.0) * vt._cell
+		check(vt.arrow_at(vt._origin + Vector2(-5, -5) * vt._cell) == -1, "tocar fuera del tablero no selecciona nada")
+	vt.queue_free()
+	await _frames(1)
+
 	# Choques: tocar flechas bloqueadas resta luces y al tercer choque se pierde.
 	var v2 = await _play("level", 300)
 	var bumps := 0

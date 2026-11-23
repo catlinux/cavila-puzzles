@@ -22,6 +22,7 @@ var _anims := {}       # flecha -> animación en curso (salida o choque)
 var _gone := {}        # flechas que ya salieron de la pantalla
 var _flash := {}       # flecha -> segundos de destello coral
 var _tracks: Array = []  # recorrido de cada flecha en coordenadas de casilla
+var _boxes: Array = []   # rectángulo que ocupa cada flecha (para descartar rápido al tocar)
 var _exit_len: Array = []
 var _particles: Array = []
 var _hint_until := 0.0
@@ -214,8 +215,13 @@ func _prepare() -> void:
 	_occ = Arrows.occupancy(puzzle)
 	_tracks.clear()
 	_exit_len.clear()
+	_boxes.clear()
 	for i in puzzle.arrows.size():
 		var a: Dictionary = puzzle.arrows[i]
+		var box := Rect2(Vector2(a.cells[0]), Vector2.ZERO)
+		for c in a.cells:
+			box = box.expand(Vector2(c))
+		_boxes.append(box)
 		var tr_pts := PackedVector2Array()
 		for c in a.cells:
 			tr_pts.append(Vector2(c))
@@ -484,24 +490,59 @@ func _clamp_pan() -> void:
 	board.queue_redraw()
 
 
-## Flecha bajo el punto (coordenadas del tablero), con tolerancia para dedos.
+## Radio del dedo (px de pantalla de diseño) y margen para preferir una flecha libre.
+const FINGER_PX := 34.0
+const FAIR_PX := 14.0
+
+
+## Flecha bajo el punto (coordenadas del tablero), con tolerancia para dedos:
+##  - se mide la distancia al trazo completo de cada flecha (cuerpo y punta);
+##  - solo cuentan las flechas dentro del radio de un dedo;
+##  - si el toque es dudoso entre una flecha que chocaría y otra casi igual de cerca que
+##    puede salir, se elige la que puede salir. Tocar claramente una flecha bloqueada
+##    sigue contando como choque.
 func arrow_at(pos: Vector2) -> int:
 	_layout()
-	var q := (pos - _origin) / _cell
-	var c := Vector2i(floori(q.x), floori(q.y))
-	if Arrows.inside(puzzle, c) and _occ[c.y * puzzle.w + c.x] >= 0:
-		return _occ[c.y * puzzle.w + c.x]
-	var best := -1
-	var best_d := 0.8
+	var q := (pos - _origin) / _cell - Vector2(0.5, 0.5)  # en casillas, centros enteros
+	var radius := clampf(FINGER_PX / _cell, 0.5, 1.2)
+	var slack := clampf(FAIR_PX / _cell, 0.2, 0.45)
+	var cands := []
 	for i in puzzle.arrows.size():
 		if removed.has(i):
 			continue
-		for cc in puzzle.arrows[i].cells:
-			var d := q.distance_to(Vector2(cc) + Vector2(0.5, 0.5))
-			if d < best_d:
-				best_d = d
-				best = i
+		var box: Rect2 = _boxes[i]
+		if not box.grow(radius + 0.5).has_point(q):
+			continue
+		var d := _dist_to_arrow(i, q)
+		if d <= radius:
+			cands.append([d, i])
+	if cands.is_empty():
+		return -1
+	cands.sort_custom(func(x, y): return x[0] < y[0])
+	var best: int = cands[0][1]
+	if not Arrows.can_exit(puzzle, best, _occ):
+		for c in cands:
+			if c[0] <= cands[0][0] + slack and Arrows.can_exit(puzzle, c[1], _occ):
+				return c[1]
 	return best
+
+
+## Distancia (en casillas) de un punto al dibujo de la flecha i: su cuerpo y su punta.
+func _dist_to_arrow(i: int, q: Vector2) -> float:
+	var a: Dictionary = puzzle.arrows[i]
+	var cells: Array = a.cells
+	var best := INF
+	for k in cells.size():
+		var p0 := Vector2(cells[k])
+		var p1 := Vector2(cells[k]) + Vector2(a.dir) * 0.3 if k == cells.size() - 1 else Vector2(cells[k + 1])
+		best = minf(best, _seg_dist(q, p0, p1))
+	return best
+
+
+static func _seg_dist(q: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var t := 0.0 if ab.length_squared() == 0.0 else clampf((q - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+	return q.distance_to(a + ab * t)
 
 
 # --- Dibujo -----------------------------------------------------------------------
