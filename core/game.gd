@@ -72,6 +72,15 @@ func puzzle_for_daily(key: String) -> Dictionary:
 	return _cache[k]
 
 
+## Dificultad (0..1) de la partida en curso.
+func difficulty() -> float:
+	return Daily.difficulty(daily_key) if mode == "daily" else Levels.difficulty(level)
+
+
+func seed_value() -> int:
+	return Daily.seed_for(daily_key) if mode == "daily" else Levels.seed_for(level)
+
+
 func world() -> Dictionary:
 	return Daily.world_for(daily_key) if mode == "daily" else Levels.world(level)
 

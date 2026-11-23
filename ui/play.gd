@@ -27,10 +27,29 @@ var _particles: Array = []
 var _hint_until := 0.0
 var _shake := 0.0
 var _combo := 0
+var _combo_points := 0
+var rival_time := 60.0
+var score := 0
+var _rival_announced := false
+var _record := false
 var _last_exit := -10.0
 var _clock := 0.0
 var _cell := 40.0
 var _origin := Vector2.ZERO
+# Zoom y desplazamiento (tableros grandes).
+var _zoom := 1.0
+var _pan := Vector2.ZERO
+var _touches := {}
+var _press_pos := Vector2.ZERO
+var _pan0 := Vector2.ZERO
+var _moved := false
+var _mouse_down := false
+var _pinch_d0 := 1.0
+var _zoom0 := 1.0
+var _last_mid := Vector2.ZERO
+var _fit_btn: Control
+var _holes := {}
+var _rocks := {}
 
 var board: Control
 var _lives_ctl: Control
@@ -112,6 +131,7 @@ func _ready() -> void:
 	board = Control.new()
 	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	board.mouse_filter = Control.MOUSE_FILTER_STOP
+	board.clip_contents = true
 	board.draw.connect(_draw_board)
 	board.gui_input.connect(_board_input)
 	vb.add_child(board)
@@ -127,7 +147,7 @@ func _ready() -> void:
 	vb.add_child(bottom)
 	_progress = Control.new()
 	_progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_progress.custom_minimum_size = Vector2(0, 84)
+	_progress.custom_minimum_size = Vector2(0, 108)
 	_progress.draw.connect(_draw_progress)
 	bottom.add_child(_progress)
 	var restart := RoundButton.new("arrow-counter-clockwise-bold")
@@ -142,8 +162,22 @@ func _ready() -> void:
 	add_child(_toast)
 
 	puzzle = Game.puzzle()
+	for c in puzzle.get("holes", []):
+		_holes[c] = true
+	for c in puzzle.get("rocks", []):
+		_rocks[c] = true
 	_prepare()
+	rival_time = Levels.rival_time(puzzle.arrows.size(), int(puzzle.get("depth", 0)), Game.seed_value())
 	_update_moves()
+	# Botón para volver a ver el tablero entero (solo visible con zoom).
+	_fit_btn = RoundButton.new("arrows-in-simple-bold", 76.0)
+	_fit_btn.visible = false
+	_fit_btn.pressed.connect(func():
+		_zoom = 1.0
+		_pan = Vector2.ZERO
+		_fit_btn.visible = false)
+	board.add_child(_fit_btn)
+	board.resized.connect(func(): _fit_btn.position = Vector2(board.size.x - 92, 8))
 	if Game.mode == "level" and Game.level <= 3:
 		_caption.text = tr(["TUTORIAL_1", "TUTORIAL_2", "TUTORIAL_3"][Game.level - 1])
 		_caption.visible = true
@@ -194,6 +228,8 @@ func tap_arrow(i: int) -> String:
 		_occ = Arrows.occupancy(puzzle, removed)
 		_anims[i] = {"kind": "exit", "t": 0.0, "v": 7.0, "end": float(_exit_len[i] + a.cells.size() + 1)}
 		_combo = _combo + 1 if _clock - _last_exit < 1.2 else 1
+		if _combo >= 3:
+			_combo_points += 5 * (_combo - 2)
 		_last_exit = _clock
 		Sfx.play_chain(_combo - 1)
 		Sfx.vibrate(8, 0.2)
@@ -256,11 +292,15 @@ func _win() -> void:
 	finished = true
 	won = true
 	var stars := Levels.stars_for(Game.lives)
+	score = Levels.score(puzzle.arrows.size(), Game.difficulty(), Game.elapsed, Game.lives, _combo_points, rival_time)
 	var bonus := 0
+	_record = false
 	if Game.mode == "daily":
 		bonus = Progress.complete_daily(Game.daily_key).hint_bonus
 	else:
-		bonus = Progress.complete_level(Game.level, stars).hint_bonus
+		var r := Progress.complete_level(Game.level, stars, score)
+		bonus = r.hint_bonus
+		_record = r.record
 	await get_tree().create_timer(0.6).timeout
 	Sfx.play("win")
 	Sfx.vibrate(15, 0.3)
@@ -278,6 +318,9 @@ func _process(delta: float) -> void:
 	_clock += delta
 	if not finished:
 		Game.elapsed += delta
+		if not _rival_announced and Game.elapsed >= rival_time:
+			_rival_announced = true
+			_show_toast(tr("RIVAL_DONE"))
 	for i in _anims.keys():
 		var an: Dictionary = _anims[i]
 		if an.kind == "exit":
@@ -311,10 +354,103 @@ func _process(delta: float) -> void:
 # --- Entrada ----------------------------------------------------------------------
 
 func _board_input(ev: InputEvent) -> void:
-	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
-		var i := arrow_at(ev.position)
-		if i >= 0:
-			tap_arrow(i)
+	if ev is InputEventScreenTouch:
+		if ev.pressed:
+			_touches[ev.index] = ev.position
+			if _touches.size() == 1:
+				_press_pos = ev.position
+				_pan0 = _pan
+				_moved = false
+			elif _touches.size() == 2:
+				var pts: Array = _touches.values()
+				_pinch_d0 = maxf(pts[0].distance_to(pts[1]), 1.0)
+				_zoom0 = _zoom
+				_last_mid = (pts[0] + pts[1]) / 2.0
+				_moved = true
+		else:
+			_touches.erase(ev.index)
+			if _touches.is_empty():
+				if not _moved:
+					_tap(ev.position)
+			elif _touches.size() == 1:
+				_press_pos = _touches.values()[0]
+				_pan0 = _pan
+	elif ev is InputEventScreenDrag:
+		_touches[ev.index] = ev.position
+		if _touches.size() >= 2:
+			var pts: Array = _touches.values()
+			var mid: Vector2 = (pts[0] + pts[1]) / 2.0
+			_zoom_at(_zoom0 * pts[0].distance_to(pts[1]) / _pinch_d0, mid)
+			_pan += mid - _last_mid
+			_last_mid = mid
+			_clamp_pan()
+		elif _touches.size() == 1:
+			_drag_to(ev.position)
+	elif ev is InputEventMouseButton and ev.device != InputEvent.DEVICE_ID_EMULATION:
+		if ev.button_index == MOUSE_BUTTON_LEFT:
+			_mouse_down = ev.pressed
+			if ev.pressed:
+				_press_pos = ev.position
+				_pan0 = _pan
+				_moved = false
+			elif not _moved:
+				_tap(ev.position)
+		elif ev.pressed and ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			_zoom_at(_zoom * (1.15 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.15), ev.position)
+	elif ev is InputEventMouseMotion and _mouse_down and ev.device != InputEvent.DEVICE_ID_EMULATION:
+		_drag_to(ev.position)
+	elif ev is InputEventMagnifyGesture:
+		_zoom_at(_zoom * ev.factor, ev.position)
+
+
+func _tap(pos: Vector2) -> void:
+	var i := arrow_at(pos)
+	if i >= 0:
+		tap_arrow(i)
+
+
+func _drag_to(pos: Vector2) -> void:
+	var dist := pos.distance_to(_press_pos)
+	if _zoom > 1.01:
+		if dist > 14.0:
+			_moved = true
+		if _moved:
+			_pan = _pan0 + (pos - _press_pos)
+			_clamp_pan()
+	elif dist > 40.0:
+		_moved = true  # un arrastre largo sin zoom no cuenta como toque
+
+
+func _base_cell() -> float:
+	var s := board.size
+	return minf(minf((s.x - 48.0) / puzzle.w, (s.y - 48.0) / puzzle.h), 92.0)
+
+
+## Zoom máximo: casillas de unos 60 px (solo los tableros grandes permiten zoom).
+func _max_zoom() -> float:
+	return clampf(60.0 / _base_cell(), 1.0, 3.5)
+
+
+## Cambia el zoom manteniendo fijo el punto del tablero que está bajo `at`.
+func _zoom_at(z: float, at: Vector2) -> void:
+	_layout()
+	var q := (at - _origin) / _cell
+	_zoom = clampf(z, 1.0, _max_zoom())
+	var cell2 := _base_cell() * _zoom
+	var origin2 := at - q * cell2
+	_pan = origin2 - board.size / 2.0 + Vector2(puzzle.w, puzzle.h) * cell2 / 2.0
+	_clamp_pan()
+
+
+func _clamp_pan() -> void:
+	if _zoom <= 1.001:
+		_pan = Vector2.ZERO
+	else:
+		var extra := (Vector2(puzzle.w, puzzle.h) * _base_cell() * _zoom - board.size) / 2.0 + Vector2(40, 40)
+		extra = extra.max(Vector2.ZERO)
+		_pan = _pan.clamp(-extra, extra)
+	if _fit_btn:
+		_fit_btn.visible = _zoom > 1.01
 
 
 ## Flecha bajo el punto (coordenadas del tablero), con tolerancia para dedos.
@@ -322,7 +458,7 @@ func arrow_at(pos: Vector2) -> int:
 	_layout()
 	var q := (pos - _origin) / _cell
 	var c := Vector2i(floori(q.x), floori(q.y))
-	if Arrows.inside(puzzle, c) and _occ[c.y * puzzle.w + c.x] != -1:
+	if Arrows.inside(puzzle, c) and _occ[c.y * puzzle.w + c.x] >= 0:
 		return _occ[c.y * puzzle.w + c.x]
 	var best := -1
 	var best_d := 0.8
@@ -340,9 +476,8 @@ func arrow_at(pos: Vector2) -> int:
 # --- Dibujo -----------------------------------------------------------------------
 
 func _layout() -> void:
-	var s := board.size
-	_cell = minf(minf((s.x - 48.0) / puzzle.w, (s.y - 48.0) / puzzle.h), 92.0)
-	_origin = (s - Vector2(puzzle.w, puzzle.h) * _cell) / 2.0
+	_cell = _base_cell() * _zoom
+	_origin = board.size / 2.0 + _pan - Vector2(puzzle.w, puzzle.h) * _cell / 2.0
 
 
 func _px(v: Vector2) -> Vector2:
@@ -383,15 +518,19 @@ func _draw_board() -> void:
 	if puzzle.is_empty():
 		return
 	_layout()
-	var card := Rect2(_origin, Vector2(puzzle.w, puzzle.h) * _cell).grow(minf(24.0, _cell * 0.6))
-	Style.soft_shadow(board, card, 44.0, Style.SHADOW, 22.0, Vector2(0, 12))
-	Style.fill_round(board, card, 44.0, Style.CARD)
+	_draw_shape()
 	var shake := Vector2(sin(_clock * 70.0) * _shake * 12.0, 0)
 	board.draw_set_transform(shake)
 	var dot := maxf(1.6, _cell * 0.05)
 	for y in puzzle.h:
 		for x in puzzle.w:
-			board.draw_circle(_px(Vector2(x, y)), dot, Style.DOT)
+			var c := Vector2i(x, y)
+			if _holes.has(c):
+				continue
+			if _rocks.has(c):
+				_draw_rock(c)
+			else:
+				board.draw_circle(_px(Vector2(x, y)), dot, Style.DOT)
 	for pass_moving in [false, true]:
 		for i in puzzle.arrows.size():
 			if _gone.has(i) or _anims.has(i) != pass_moving:
@@ -439,6 +578,36 @@ func _draw_arrow(i: int) -> void:
 	board.draw_polyline(outline, col, wdt * 0.45, true)
 
 
+## Fondo blanco con la silueta del tablero (unión de casillas redondeadas, sin los huecos).
+func _draw_shape() -> void:
+	var g := minf(22.0, _cell * 0.55)
+	if _holes.is_empty():
+		var card := Rect2(_origin, Vector2(puzzle.w, puzzle.h) * _cell).grow(g)
+		Style.soft_shadow(board, card, 44.0, Style.SHADOW, 22.0, Vector2(0, 12))
+		Style.fill_round(board, card, 44.0, Style.CARD)
+		return
+	# Casillas solapadas con esquinas poco redondeadas: el borde queda escalonado y limpio.
+	g = minf(_cell * 0.42, 18.0)
+	var rad := minf(_cell * 0.32, 14.0)
+	for pass_i in 2:
+		for y in puzzle.h:
+			for x in puzzle.w:
+				if _holes.has(Vector2i(x, y)):
+					continue
+				var r := Rect2(_origin + Vector2(x, y) * _cell, Vector2(_cell, _cell)).grow(g)
+				if pass_i == 0:
+					Style.fill_round(board, Rect2(r.position + Vector2(0, 10), r.size).grow(6), rad, Color(Style.SHADOW, 0.035), 4)
+				else:
+					Style.fill_round(board, r, rad, Style.CARD, 4)
+
+
+## Obstáculo: bloque gris con un brillo, que ninguna flecha puede atravesar.
+func _draw_rock(c: Vector2i) -> void:
+	var r := Rect2(_origin + Vector2(c) * _cell, Vector2(_cell, _cell)).grow(-_cell * 0.06)
+	Style.fill_round(board, r, _cell * 0.22, Color8(214, 219, 230), 4)
+	Style.fill_round(board, Rect2(r.position + Vector2(r.size.x * 0.18, r.size.y * 0.16), r.size * Vector2(0.4, 0.18)), _cell * 0.08, Color(1, 1, 1, 0.55), 3)
+
+
 ## Trazo con extremos y uniones redondeadas.
 func _stroke(pts: PackedVector2Array, col: Color, width: float) -> void:
 	board.draw_polyline(pts, col, width, true)
@@ -462,16 +631,27 @@ func _draw_lives() -> void:
 		c.draw_texture(tex, Vector2(i * 56.0, (c.size.y - tex.get_height()) / 2.0))
 
 
+## Dos barras: la tuya (flechas despejadas) y la de la máquina (avanza con el tiempo).
 func _draw_progress() -> void:
 	var c := _progress
 	var n: int = puzzle.arrows.size()
 	var txt := tr("ARROWS_PROGRESS") % [removed.size(), n]
-	c.draw_string(Style.font("body_bold"), Vector2(2, 30), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Style.SUB)
-	var bar := Rect2(Vector2(0, 52), Vector2(c.size.x, 18))
-	Style.fill_round(c, bar, 9.0, Style.TRACK, 6)
+	c.draw_string(Style.font("body_bold"), Vector2(2, 26), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Style.SUB)
+	var left := 70.0
+	var you := Style.icon("user-fill", world.a, 26)
+	var bot := Style.icon("robot-fill", Style.SUB, 26)
+	var bar := Rect2(Vector2(left, 46), Vector2(c.size.x - left, 16))
+	c.draw_texture(you, Vector2(8, bar.get_center().y - 13))
+	Style.fill_round(c, bar, 8.0, Style.TRACK, 6)
 	var f := float(removed.size()) / maxf(n, 1)
 	if f > 0.0:
-		Style.gradient_shape(c, Rect2(bar.position, Vector2(maxf(bar.size.x * f, 18.0), bar.size.y)), 9.0, world.a, world.b)
+		Style.gradient_shape(c, Rect2(bar.position, Vector2(maxf(bar.size.x * f, 16.0), bar.size.y)), 8.0, world.a, world.b)
+	var bar2 := Rect2(Vector2(left, 80), Vector2(c.size.x - left, 12))
+	c.draw_texture(bot, Vector2(8, bar2.get_center().y - 13))
+	Style.fill_round(c, bar2, 6.0, Style.TRACK, 6)
+	var rf := clampf(Game.elapsed / rival_time, 0.0, 1.0)
+	if rf > 0.0:
+		Style.fill_round(c, Rect2(bar2.position, Vector2(maxf(bar2.size.x * rf, 12.0), bar2.size.y)), 6.0, Color(Style.INK, 0.35), 6)
 
 
 func _show_toast(text: String) -> void:
@@ -505,15 +685,29 @@ func _show_result(is_win: bool, stars: int, bonus: int) -> void:
 
 	var born := _clock
 	var stars_ctl := Control.new()
-	stars_ctl.custom_minimum_size = Vector2(0, 190)
+	stars_ctl.custom_minimum_size = Vector2(0, 160)
 	stars_ctl.draw.connect(func(): _draw_result_stars(stars_ctl, is_win, stars, _clock - born))
 	vb.add_child(stars_ctl)
 	vb.add_child(Style.label(tr("WIN") if is_win else tr("LOSE"), 62, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
-	var t := int(Game.elapsed)
-	var info := "%d:%02d" % [t / 60, t % 60] if is_win else tr("LOSE_SUB")
-	var info_l := Style.label(info, 30, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER)
-	info_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vb.add_child(info_l)
+	if is_win:
+		vb.add_child(Style.label(tr("POINTS") % Style.fmt_int(score), 44, world.a, "display", HORIZONTAL_ALIGNMENT_CENTER))
+		if _record:
+			vb.add_child(Style.label(tr("NEW_RECORD"), 28, Style.GOLD, "display", HORIZONTAL_ALIGNMENT_CENTER))
+		var diff := rival_time - Game.elapsed
+		var rival_txt: String = (tr("BEAT_RIVAL") % Style.fmt_time(diff)) if diff >= 0.0 else (tr("LOST_RIVAL") % Style.fmt_time(rival_time))
+		var row_r := HBoxContainer.new()
+		row_r.alignment = BoxContainer.ALIGNMENT_CENTER
+		row_r.add_theme_constant_override("separation", 10)
+		var ri := TextureRect.new()
+		ri.texture = Style.icon("robot-fill", Style.SUB, 30)
+		ri.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		row_r.add_child(ri)
+		row_r.add_child(Style.label("%s · %s" % [Style.fmt_time(Game.elapsed), rival_txt], 26, Style.SUB, "body"))
+		vb.add_child(row_r)
+	else:
+		var info_l := Style.label(tr("LOSE_SUB"), 30, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER)
+		info_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vb.add_child(info_l)
 	if bonus > 0:
 		vb.add_child(Style.label((tr("HINT_BONUS") if bonus == 1 else tr("HINT_BONUS_N")) % bonus, 32, Style.GOLD, "display", HORIZONTAL_ALIGNMENT_CENTER))
 	var gap := Control.new()

@@ -10,12 +10,19 @@ se sintetiza por código. Textos en **español** y **catalán**.
 
 ## Qué tiene
 
-- **Niveles ilimitados** con dificultad creciente: tableros de 4×6 a 16×24, más flechas, más largas
-  y con cadenas de dependencias más profundas. Ritmo en bloques de 10 (respiro, normales y un reto).
+- **Niveles ilimitados** con dificultad creciente: tableros de 5×7 a 24×36, con flechas de todos los
+  tamaños (incluidas "serpientes" largas que se enroscan) y cadenas de dependencias cada vez más largas.
+  Ritmo en bloques de 10 (respiro, normales y un reto).
+- **Tableros variados**: rectángulo, esquinas recortadas, óvalo, rombo, cruz, anillo, reloj de arena,
+  escalones y tableros con **rocas** que bloquean el paso. Se desbloquean poco a poco.
+- **Zoom** pellizcando y desplazamiento arrastrando en los tableros grandes.
+- **Puntuación** por nivel (flechas, dificultad, errores, combos y rapidez) con récord personal, y un
+  **rival de la máquina** que avanza a su ritmo mientras juegas.
 - **Mundos** de 30 niveles, cada uno con su color (Alba, Marea, Ámbar, Bruma, Bosque, Ascua, Glaciar, Nébula).
 - **Evento semanal**: completa 20 niveles en la semana y gana 3 pistas.
 - Indicador de **movimientos posibles** (flechas que pueden salir en este momento).
-- **Música ambiente** y efectos zen (campanitas pentatónicas) sintetizados por código; vibración
+- **Música ambiente** (acordes suaves con una melodía lenta tipo kalimba) y efectos zen (campanitas
+  pentatónicas), todo sintetizado por código; vibración
   suave. Todo se puede desactivar en Ajustes, donde también se puede **borrar el progreso**.
 - **3 luces** por nivel y **estrellas** según los choques (3/2/1).
 - **Pistas**: señalan la flecha libre más útil. Se ganan cada 5 niveles y con el reto diario.

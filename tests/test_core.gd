@@ -41,10 +41,11 @@ func run() -> void:
 	pr.save_path = path
 	pr.load_data()
 	check(pr.current_level() == 1 and pr.hints() == 3, "estado inicial")
-	pr.complete_level(1, 3)
-	pr.complete_level(2, 1)
-	pr.complete_level(2, 2)  # mejora: se guarda la mejor
-	pr.complete_level(1, 1)  # peor: no pisa
+	pr.complete_level(1, 3, 500)
+	pr.complete_level(2, 1, 300)
+	var rec: Dictionary = pr.complete_level(2, 2, 450)  # mejora: se guarda la mejor
+	check(rec.record, "nuevo récord al mejorar")
+	pr.complete_level(1, 1, 100)  # peor: no pisa
 	var b5: Dictionary = {}
 	for n in range(3, 6):
 		b5 = pr.complete_level(n, 3)
@@ -61,6 +62,8 @@ func run() -> void:
 	check(pr2.current_level() == 6, "nivel actual persistente")
 	check(pr2.stars(1) == 3 and pr2.stars(2) == 2, "mejores estrellas")
 	check(pr2.total_stars() == 3 + 2 + 9, "total de estrellas")
+	check(pr2.best_score(1) == 500 and pr2.best_score(2) == 450, "mejores puntuaciones")
+	check(pr2.total_score() == 950, "puntos totales")
 	check(pr2.daily_done("2026-03-02") and not pr2.daily_done("2026-03-03"), "diario completado")
 	check(pr2.streak("2026-03-02") == 2 and pr2.streak("2026-03-03") == 2, "racha vigente")
 	check(pr2.streak("2026-03-05") == 0, "racha perdida")

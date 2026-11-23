@@ -15,9 +15,12 @@ static func seed_for(date_key: String) -> int:
 
 
 ## Dificultad media-alta que varía cada día.
+static func difficulty(date_key: String) -> float:
+	return 0.45 + 0.3 * float(Rng.hash_string("diario-dif:" + date_key) % 100) / 100.0
+
+
 static func params_for(date_key: String) -> Dictionary:
-	var t := 0.45 + 0.3 * float(Rng.hash_string("diario-dif:" + date_key) % 100) / 100.0
-	return Levels.params_from(t)
+	return Levels.params_from(difficulty(date_key), seed_for(date_key), 6)
 
 
 static func world_for(date_key: String) -> Dictionary:

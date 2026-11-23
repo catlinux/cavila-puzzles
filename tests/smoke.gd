@@ -44,6 +44,21 @@ func _play(mode: String, n: int = 1, key: String = "") -> Node:
 	return await _spawn("res://ui/play.tscn")
 
 
+func _touch(idx: int, pressed: bool, pos: Vector2) -> InputEventScreenTouch:
+	var e := InputEventScreenTouch.new()
+	e.index = idx
+	e.pressed = pressed
+	e.position = pos
+	return e
+
+
+func _drag(idx: int, pos: Vector2) -> InputEventScreenDrag:
+	var e := InputEventScreenDrag.new()
+	e.index = idx
+	e.position = pos
+	return e
+
+
 func _run() -> void:
 	var home = await _spawn("res://ui/home.tscn")
 	home._open_settings()
@@ -80,6 +95,39 @@ func _run() -> void:
 		check(Progress.current_level() == lv + 1 or Progress.current_level() > lv, "nivel %d: progreso guardado" % lv)
 		v.queue_free()
 		await _frames(1)
+
+	# Dedo real: pulsar y soltar sobre una flecha libre la saca; arrastrar no; zoom y desplazamiento.
+	var vz = await _play("level", 900)
+	var free_i: int = Arrows.free_arrows(vz.puzzle, {})[0]
+	vz._layout()
+	var pos: Vector2 = vz._origin + (Vector2(vz.puzzle.arrows[free_i].cells[0]) + Vector2(0.5, 0.5)) * vz._cell
+	vz._board_input(_touch(0, true, pos))
+	vz._board_input(_touch(0, false, pos))
+	check(vz.removed.has(free_i), "un toque con el dedo saca la flecha")
+	var other: int = Arrows.free_arrows(vz.puzzle, vz.removed)[0]
+	var pos2: Vector2 = vz._origin + (Vector2(vz.puzzle.arrows[other].cells[0]) + Vector2(0.5, 0.5)) * vz._cell
+	vz._board_input(_touch(0, true, pos2))
+	vz._board_input(_drag(0, pos2 + Vector2(120, 0)))
+	vz._board_input(_touch(0, false, pos2 + Vector2(120, 0)))
+	check(not vz.removed.has(other), "un arrastre no cuenta como toque")
+	check(vz._max_zoom() > 1.0, "los tableros grandes permiten zoom")
+	var c0: Vector2 = vz.board.size / 2.0
+	vz._board_input(_touch(0, true, c0 - Vector2(50, 0)))
+	vz._board_input(_touch(1, true, c0 + Vector2(50, 0)))
+	vz._board_input(_drag(1, c0 + Vector2(150, 0)))
+	check(vz._zoom > 1.5, "pellizcar hace zoom (%.2f)" % vz._zoom)
+	vz._board_input(_touch(1, false, c0 + Vector2(150, 0)))
+	vz._board_input(_touch(0, false, c0 - Vector2(50, 0)))
+	var pan_before: Vector2 = vz._pan
+	vz._board_input(_touch(0, true, c0))
+	vz._board_input(_drag(0, c0 + Vector2(60, 40)))
+	vz._board_input(_touch(0, false, c0 + Vector2(60, 40)))
+	check(vz._pan != pan_before, "arrastrar con zoom mueve el tablero")
+	check(vz._fit_btn.visible, "aparece el botón de ver todo")
+	vz._fit_btn.pressed.emit()
+	check(vz._zoom == 1.0 and vz._pan == Vector2.ZERO, "ver todo restablece el zoom")
+	vz.queue_free()
+	await _frames(1)
 
 	# Choques: tocar flechas bloqueadas resta luces y al tercer choque se pierde.
 	var v2 = await _play("level", 300)

@@ -1,12 +1,12 @@
 extends Node
 ## Autoload "Sfx": sonido y vibración. Todo se sintetiza por código (sin archivos de audio).
 ##  - Efectos zen: campanitas en escala pentatónica (suben de nota al encadenar flechas).
-##  - Música ambiente: pad de acordes suaves con campanitas y eco, en bucle. Se genera en un
+##  - Música ambiente: acordes suaves, bajo y una melodía lenta tipo kalimba, en bucle. Se genera en un
 ##    hilo aparte la primera vez y se guarda en user:// para que las siguientes sea inmediata.
 
 const RATE := 22050
-const MUSIC_RATE := 16000
-const MUSIC_VERSION := 1
+const MUSIC_RATE := 12000
+const MUSIC_VERSION := 2
 const MUSIC_CACHE := "user://ambient_v%d.pcm"
 
 ## Pentatónica de Do (Do5 … Do6): cualquier secuencia de notas suena bien.
@@ -120,52 +120,86 @@ func _set_music_data(data: PackedByteArray) -> void:
 		_music.play()
 
 
-## Pad de 4 acordes (8 s cada uno) con campanitas pentatónicas y eco. El bucle no tiene
-## corte: lo que sobrepasa el final se suma al principio.
+## Música de 64 s en bucle a 60 pulsos por minuto: 8 acordes de 8 pulsos, un pad muy suave,
+## un bajo discreto y una melodía tipo kalimba en pentatónica de La menor. Lo que pasa del
+## final se suma al principio, así que el bucle no tiene corte.
 func _ambient() -> PackedByteArray:
-	var chord_len := 8.0
+	var R := MUSIC_RATE
+	var beat := 1.0
+	var chord_len := 8.0 * beat
+	# [voces del pad, notas del acorde para la melodía]
 	var chords := [
-		[110.0, 164.81, 196.0, 246.94, 261.63],  # La m9
-		[87.31, 130.81, 164.81, 220.0],          # Fa maj7
-		[130.81, 196.0, 246.94, 329.63],         # Do maj7
-		[98.0, 146.83, 246.94, 293.66],          # Sol 6
+		[[110.0, 164.81, 220.0, 261.63], [440.0, 523.25, 659.25]],   # La m
+		[[87.31, 130.81, 174.61, 220.0], [440.0, 523.25, 698.46]],   # Fa
+		[[130.81, 196.0, 261.63, 329.63], [523.25, 659.25, 783.99]], # Do
+		[[98.0, 146.83, 196.0, 246.94], [392.0, 587.33, 783.99]],    # Sol
+		[[110.0, 164.81, 220.0, 261.63], [440.0, 523.25, 659.25]],   # La m
+		[[73.42, 146.83, 174.61, 220.0], [440.0, 587.33, 698.46]],   # Re m
+		[[87.31, 130.81, 174.61, 220.0], [440.0, 523.25, 698.46]],   # Fa
+		[[98.0, 146.83, 196.0, 246.94], [392.0, 587.33, 783.99]],    # Sol
 	]
-	var n := int(chord_len * chords.size() * MUSIC_RATE)
+	var n := int(chord_len * chords.size() * R)
 	var buf := PackedFloat32Array()
 	buf.resize(n)
-	# Pad: cada voz entra despacio, se mantiene y se apaga solapándose con el siguiente acorde.
-	var voice_len := int((chord_len + 3.0) * MUSIC_RATE)
-	var att := 3.0 * MUSIC_RATE
+	# Pad y bajo: entran despacio y se solapan con el acorde siguiente.
+	var voice_len := int((chord_len + 3.0) * R)
+	var att := 2.5 * R
 	for ci in chords.size():
-		var start := int(ci * chord_len * MUSIC_RATE)
-		for f in chords[ci]:
-			var ph := 0.0
-			var amp := 0.055 if f < 200.0 else 0.04
-			for i in voice_len:
-				var env := minf(1.0, i / att) * minf(1.0, (voice_len - i) / att)
-				ph += TAU * f * (1.0 + 0.0015 * sin(i * 0.00031)) / MUSIC_RATE
-				buf[(start + i) % n] += (sin(ph) + 0.12 * sin(ph * 2.0)) * env * amp
-	# Campanitas suaves al azar (semilla fija: siempre la misma melodía).
+		var start := int(ci * chord_len * R)
+		var freqs: Array = chords[ci][0]
+		var phases := []
+		phases.resize(freqs.size() + 1)
+		phases.fill(0.0)
+		var bass: float = freqs[0] / 2.0 if freqs[0] > 90.0 else freqs[0]
+		for i in voice_len:
+			var env := minf(1.0, i / att) * minf(1.0, (voice_len - i) / att)
+			var v := 0.0
+			for k in freqs.size():
+				phases[k] += TAU * freqs[k] / R
+				v += sin(phases[k])
+			phases[freqs.size()] += TAU * bass / R
+			v = v * 0.026 + sin(phases[freqs.size()]) * 0.045
+			buf[(start + i) % n] += v * env
+	# Melodía: ritmos con silencios y notas que se mueven por grados conjuntos.
+	var scale := [329.63, 392.0, 440.0, 523.25, 587.33, 659.25, 783.99, 880.0]
+	var rhythms := [[0.0, 1.0, 2.0, 3.5, 5.0], [0.0, 1.5, 3.0, 4.0, 6.0], [0.0, 2.0, 3.0, 4.5],
+		[0.5, 1.0, 2.0, 4.0, 5.5], [0.0, 3.0, 4.0], [0.0, 1.0, 1.5, 2.0, 4.0, 6.0]]
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 2026
-	var bells := [440.0, 523.25, 587.33, 659.25, 783.99, 880.0]
-	var t := 1.0
-	var bell_len := int(2.6 * MUSIC_RATE)
-	while t < chord_len * chords.size():
-		if rng.randf() < 0.7:
-			var f: float = bells[rng.randi() % bells.size()]
-			var start := int(t * MUSIC_RATE)
+	rng.seed = 60
+	var idx := 3
+	var note_len := int(2.4 * R)
+	for ci in chords.size():
+		var rhythm: Array = rhythms[rng.randi() % rhythms.size()]
+		if ci % 4 == 3:
+			rhythm = [0.0, 2.0]  # cada cuatro acordes, la frase descansa
+		var tones: Array = chords[ci][1]
+		for k in rhythm.size():
+			if k == 0:
+				# Primera nota de cada acorde: la nota del acorde más cercana.
+				var best := 0
+				for j in scale.size():
+					if tones.has(scale[j]) and absi(j - idx) < absi(best - idx):
+						best = j
+				idx = best
+			else:
+				idx = clampi(idx + [-2, -1, -1, 1, 1, 2][rng.randi() % 6], 0, scale.size() - 1)
+			var f: float = scale[idx]
+			var start := int((ci * chord_len + rhythm[k] * beat) * R)
 			var ph := 0.0
-			for i in bell_len:
-				ph += TAU * f / MUSIC_RATE
-				var env := exp(-i / (0.55 * MUSIC_RATE)) * minf(1.0, i / 60.0)
-				buf[(start + i) % n] += (sin(ph) + 0.25 * sin(ph * 2.01)) * env * 0.05
-		t += rng.randf_range(1.2, 2.8)
-	# Eco (con vuelta al principio para que el bucle sea continuo).
-	var delay := int(0.42 * MUSIC_RATE)
+			var ph2 := 0.0
+			var vol := 0.10 if k == 0 else 0.075
+			for i in note_len:
+				ph += TAU * f / R
+				ph2 += TAU * f * 3.0 / R
+				var t := float(i) / R
+				var env := exp(-t / 0.75) * minf(1.0, i / (R * 0.004))
+				var tine := 0.22 * sin(ph2) * exp(-t / 0.08)
+				buf[(start + i) % n] += (sin(ph) + tine) * env * vol
+	# Eco suave (con vuelta al principio para que el bucle sea continuo).
+	var delay := int(0.5 * beat * R)
 	for _pass in 2:
 		for i in n:
-			buf[i] += buf[(i - delay + n) % n] * 0.28
+			buf[i] += buf[(i - delay + n) % n] * 0.25
 	var peak := 0.0001
 	for v in buf:
 		peak = maxf(peak, absf(v))

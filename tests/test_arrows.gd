@@ -71,8 +71,9 @@ func run() -> void:
 		var cov := 0
 		for a in g.arrows:
 			cov += a.cells.size()
-			check(a.cells.size() <= int(par.max_len * 1.4), "longitud máxima " + tag)
-		check(float(cov) / (g.w * g.h) >= (0.6 if lv < 10 else 0.85), "tablero bien lleno " + tag + " (%.2f)" % (float(cov) / (g.w * g.h)))
+			check(a.cells.size() <= maxi(int(par.max_len * 1.4), par.snake_max), "longitud máxima " + tag)
+		var playable: int = g.w * g.h - g.holes.size() - g.rocks.size()
+		check(float(cov) / playable >= (0.6 if lv < 10 else 0.85), "tablero bien lleno " + tag + " (%.2f)" % (float(cov) / playable))
 		# Reproducir la solución tocando flechas una a una.
 		var removed := {}
 		var all_ok := true
@@ -83,6 +84,42 @@ func run() -> void:
 		check(all_ok, "la solución se puede jugar paso a paso " + tag)
 	print("    generador: %d niveles en %d ms (peor %d ms)" % [samples.size(), Time.get_ticks_msec() - t0, worst])
 
+	# Formas y obstáculos.
+	var rock_p := {"w": 5, "h": 3, "rocks": [Vector2i(4, 1)], "holes": [Vector2i(0, 0)], "arrows": [_arrow([Vector2i(1, 1), Vector2i(2, 1)])]}
+	check(Arrows.validate(rock_p).reason == "rock_block", "una roca no puede tapar una salida")
+	check(Arrows.blocker(rock_p, 0, Arrows.occupancy(rock_p)).by == Arrows.ROCK, "la roca bloquea")
+	var hole_p := {"w": 3, "h": 1, "rocks": [], "holes": [Vector2i(0, 0)], "arrows": [_arrow([Vector2i(0, 0), Vector2i(1, 0)])]}
+	check(Arrows.validate(hole_p).reason == "on_hole_or_rock", "no hay flechas en los huecos")
+	var hole_fly := {"w": 4, "h": 1, "rocks": [], "holes": [Vector2i(3, 0)], "arrows": [_arrow([Vector2i(0, 0), Vector2i(1, 0)])]}
+	check(Arrows.can_exit(hole_fly, 0, Arrows.occupancy(hole_fly)), "las flechas cruzan los huecos")
+	var kinds := {}
+	var with_rocks := 0
+	for lv in range(1, 300, 3):
+		var par := Levels.params_for(lv)
+		kinds[par.shape] = true
+		if not par.rocks.is_empty():
+			with_rocks += 1
+	check(kinds.size() >= 8, "variedad de formas (%d)" % kinds.size())
+	check(with_rocks >= 5, "hay niveles con obstáculos (%d)" % with_rocks)
+	check(Levels.params_for(1).shape == "rect" and Levels.params_for(11).shape == "rect", "los primeros niveles son rectangulares")
+	# Variedad de largos en niveles altos: hay serpientes largas y flechas cortas a la vez.
+	var long_ok := 0
+	for lv in [301, 455, 702, 1003]:
+		var g := Arrows.generate(Levels.seed_for(lv), Levels.params_for(lv))
+		var mx := 0
+		var mn := 99
+		for a in g.arrows:
+			mx = maxi(mx, a.cells.size())
+			mn = mini(mn, a.cells.size())
+		if mx >= 18 and mn <= 4:
+			long_ok += 1
+	check(long_ok >= 3, "serpientes largas y flechas cortas en niveles altos (%d/4)" % long_ok)
+	# Puntuación y rival.
+	check(Levels.score(50, 0.5, 30.0, 3, 0, 60.0) > Levels.score(50, 0.5, 90.0, 3, 0, 60.0), "más rápido, más puntos")
+	check(Levels.score(50, 0.5, 30.0, 3, 0, 60.0) > Levels.score(50, 0.5, 30.0, 1, 0, 60.0), "menos errores, más puntos")
+	check(Levels.score(50, 0.9, 30.0, 3, 0, 60.0) > Levels.score(50, 0.1, 30.0, 3, 0, 60.0), "más difícil, más puntos")
+	check(Levels.rival_time(100, 40, 5) > Levels.rival_time(20, 5, 5), "el rival tarda más en tableros grandes")
+
 	# Determinismo.
 	var a1 := Arrows.generate(Levels.seed_for(77), Levels.params_for(77))
 	var a2 := Arrows.generate(Levels.seed_for(77), Levels.params_for(77))
@@ -90,7 +127,7 @@ func run() -> void:
 	check(var_to_str(a1) != var_to_str(Arrows.generate(Levels.seed_for(78), Levels.params_for(78))), "otro nivel => otro tablero")
 
 	# Curva: crece en media y los primeros niveles son pequeños.
-	check(Levels.params_for(1).w <= 5, "nivel 1 pequeño")
+	check(Levels.params_for(1).w <= 6 and Levels.params_for(1).h <= 10, "nivel 1 pequeño")
 	var avg_lo := 0.0
 	var avg_hi := 0.0
 	for k in 20:

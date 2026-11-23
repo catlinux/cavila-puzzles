@@ -155,6 +155,21 @@ static func soft_shadow(ci: CanvasItem, r: Rect2, rad: float, color: Color = SHA
 		fill_round(ci, Rect2(r.position + offset, r.size).grow(g), rad + g, Color(color, color.a / n * 1.6), 6)
 
 
+## 12340 -> "12.340"
+static func fmt_int(n: int) -> String:
+	var s := str(absi(n))
+	var out := ""
+	while s.length() > 3:
+		out = "." + s.substr(s.length() - 3) + out
+		s = s.substr(0, s.length() - 3)
+	return ("-" if n < 0 else "") + s + out
+
+
+static func fmt_time(t: float) -> String:
+	var n := int(t)
+	return "%d:%02d" % [n / 60, n % 60]
+
+
 static func fade_in(n: CanvasItem, t := 0.25) -> void:
 	n.modulate.a = 0.0
 	n.create_tween().tween_property(n, "modulate:a", 1.0, t)

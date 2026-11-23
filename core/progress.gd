@@ -10,7 +10,7 @@ func _ready() -> void:
 
 
 func _default() -> Dictionary:
-	return {"version": 2, "level": 1, "stars": {}, "hints": 3, "daily": {},
+	return {"version": 2, "level": 1, "stars": {}, "scores": {}, "hints": 3, "daily": {},
 		"streak": {"last": "", "count": 0},
 		"event": {"week": -1, "count": 0, "claimed": false},
 		"settings": {"lang": "", "sound": true, "vibration": true, "music": true}}
@@ -62,9 +62,12 @@ func total_stars() -> int:
 
 ## Registra un nivel superado. Cada 5 niveles nuevos se gana una pista.
 ## Devuelve {"first": bool, "hint_bonus": int}.
-func complete_level(level: int, star_count: int) -> Dictionary:
+func complete_level(level: int, star_count: int, points: int = 0) -> Dictionary:
 	var first: bool = not data["stars"].has(str(level))
 	data["stars"][str(level)] = maxi(star_count, stars(level))
+	var record := points > best_score(level)
+	if record:
+		data["scores"][str(level)] = points
 	if level >= current_level():
 		data["level"] = level + 1
 	var bonus := 0
@@ -73,7 +76,18 @@ func complete_level(level: int, star_count: int) -> Dictionary:
 		data["hints"] = hints() + 1
 	bonus += _event_progress()
 	save()
-	return {"first": first, "hint_bonus": bonus}
+	return {"first": first, "hint_bonus": bonus, "record": record and not first}
+
+
+func best_score(level: int) -> int:
+	return int(data["scores"].get(str(level), 0))
+
+
+func total_score() -> int:
+	var n := 0
+	for k in data["scores"]:
+		n += int(data["scores"][k])
+	return n
 
 
 # --- Evento semanal -----------------------------------------------------------------

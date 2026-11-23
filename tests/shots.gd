@@ -26,7 +26,18 @@ func _ready() -> void:
 	await get_tree().create_timer(0.4).timeout
 	await _save(out + "/ajustes.png")
 	home.queue_free()
-	for lv in [1, 12, 81, 400, 900]:
+	# Un nivel de cada forma (los primeros que la usan a partir del 60).
+	var Levels = load("res://game/levels.gd")
+	var wanted := {}
+	for lv in range(60, 900):
+		var k: String = Levels.params_for(lv).shape
+		if not wanted.has(k):
+			wanted[k] = lv
+	var levels := [1, 81]
+	for k in ["oval", "diamond", "cross", "ring", "rocks", "pillar", "hourglass", "steps", "corners"]:
+		if wanted.has(k):
+			levels.append(wanted[k])
+	for lv in levels:
 		Game.begin("level", lv)
 		var v = load("res://ui/play.tscn").instantiate()
 		add_child(v)
@@ -37,8 +48,9 @@ func _ready() -> void:
 			v.tap_arrow(order[k])
 		if lv == 81:
 			v.use_hint()
+			Game.elapsed = v.rival_time * 0.6
 		await get_tree().create_timer(0.08).timeout
-		await _save("%s/nivel_%d.png" % [out, lv])
+		await _save("%s/nivel_%s.png" % [out, Levels.params_for(lv).shape + "_" + str(lv)])
 		v.queue_free()
 		await get_tree().process_frame
 	# Resultado de victoria.

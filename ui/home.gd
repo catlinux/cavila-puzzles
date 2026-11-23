@@ -74,6 +74,14 @@ func _ready() -> void:
 	var meta := Style.label("%d %s %d %s · %d %s" % [in_world, tr("OF"), Levels.LEVELS_PER_WORLD, tr("LEVELS_IN_WORLD"),
 		puzzle.arrows.size(), tr("ARROWS_LEFT")], 25, Style.SUB, "body")
 	info.add_child(meta)
+	var pts_row := HBoxContainer.new()
+	pts_row.add_theme_constant_override("separation", 8)
+	var pi := TextureRect.new()
+	pi.texture = Style.icon("trophy-fill", Style.GOLD, 28)
+	pi.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	pts_row.add_child(pi)
+	pts_row.add_child(Style.label(tr("TOTAL_POINTS") % Style.fmt_int(Progress.total_score()), 25, Style.SUB, "body"))
+	info.add_child(pts_row)
 	top.add_child(info)
 	var thumb := Control.new()
 	thumb.custom_minimum_size = Vector2(190, 250)

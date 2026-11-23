@@ -16,6 +16,9 @@ extends RefCounted
 
 const Rng = preload("res://core/rng.gd")
 const DIRS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+## Valores especiales del mapa de ocupación.
+const ROCK := -2   # obstáculo: bloquea las salidas
+const HOLE := -3   # hueco (solo en el generador): no se puede ocupar, pero se puede cruzar
 
 
 static func head(a: Dictionary) -> Vector2i:
@@ -31,6 +34,8 @@ static func occupancy(p: Dictionary, removed: Dictionary = {}) -> PackedInt32Arr
 	var occ := PackedInt32Array()
 	occ.resize(p.w * p.h)
 	occ.fill(-1)
+	for c in p.get("rocks", []):
+		occ[c.y * p.w + c.x] = ROCK
 	for i in p.arrows.size():
 		if removed.has(i):
 			continue
@@ -50,7 +55,7 @@ static func exit_path(p: Dictionary, i: int) -> Array:
 	return out
 
 
-## {by: flecha que bloquea (-1 si sale), steps: casillas que avanza antes de chocar}.
+## {by: flecha que bloquea (-1 si sale, ROCK si es un obstáculo), steps: casillas que avanza antes de chocar}.
 static func blocker(p: Dictionary, i: int, occ: PackedInt32Array) -> Dictionary:
 	var steps := 0
 	for c in exit_path(p, i):
@@ -125,6 +130,13 @@ static func solve(p: Dictionary, removed_in: Dictionary = {}) -> Dictionary:
 ## Comprobación estructural de un puzle. {ok, reason}.
 static func validate(p: Dictionary) -> Dictionary:
 	var seen := {}
+	var bad := {}
+	for c in p.get("holes", []):
+		bad[c] = true
+	var rock_set := {}
+	for c in p.get("rocks", []):
+		bad[c] = true
+		rock_set[c] = true
 	for i in p.arrows.size():
 		var a: Dictionary = p.arrows[i]
 		var cells: Array = a.cells
@@ -138,6 +150,8 @@ static func validate(p: Dictionary) -> Dictionary:
 				return {"ok": false, "reason": "outside"}
 			if seen.has(c):
 				return {"ok": false, "reason": "overlap"}
+			if bad.has(c):
+				return {"ok": false, "reason": "on_hole_or_rock"}
 			seen[c] = true
 			if k > 0:
 				var d: Vector2i = c - cells[k - 1]
@@ -146,6 +160,8 @@ static func validate(p: Dictionary) -> Dictionary:
 		for c in exit_path(p, i):
 			if cells.has(c):
 				return {"ok": false, "reason": "self_block"}
+			if rock_set.has(c):
+				return {"ok": false, "reason": "rock_block"}
 	return {"ok": true, "reason": "ok"}
 
 
@@ -179,7 +195,8 @@ static func generate(seed_value: int, params: Dictionary) -> Dictionary:
 static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary:
 	var w: int = params.w
 	var h: int = params.h
-	var p := {"w": w, "h": h, "arrows": []}
+	var p := {"w": w, "h": h, "arrows": [], "holes": params.get("holes", []), "rocks": params.get("rocks", []),
+		"shape": params.get("shape", "rect")}
 	# Estado del constructor:
 	#   occ      casilla -> flecha
 	#   rays_at  casilla -> flechas cuyo camino de salida pasa por ella
@@ -190,13 +207,43 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 		"hot": PackedInt32Array(), "ray_cells": []}
 	st.occ.resize(w * h)
 	st.occ.fill(-1)
+	for c in p.holes:
+		st.occ[c.y * w + c.x] = HOLE
+	for c in p.rocks:
+		st.occ[c.y * w + c.x] = ROCK
 	st.hot.resize(w * h)
 	for i in w * h:
 		st.rays_at.append([])
+	var playable: int = w * h - p.holes.size() - p.rocks.size()
 	var filled := 0
-	var target := int(params.coverage * w * h)
+	var target := int(params.coverage * playable)
 	var long_bias: float = params.get("long_bias", 0.6)
 	var chain_bias: float = params.get("chain_bias", 0.5)
+	# Fase 0: "serpientes" largas que se enroscan y cruzan el tablero (se colocan primero,
+	# cuando aún hay espacio). Después, flechas de todos los tamaños.
+	var snakes: int = params.get("snakes", 0)
+	var placed_snakes := 0
+	for _t in snakes * 30:
+		if placed_snakes >= snakes:
+			break
+		var hd := Vector2i(rng.randi() % w, rng.randi() % h)
+		if st.occ[hd.y * w + hd.x] != -1:
+			continue
+		var dirs := []
+		for d in DIRS:
+			if _dir_ok(st, hd, d):
+				dirs.append(d)
+		if dirs.is_empty():
+			continue
+		var d: Vector2i = dirs[rng.randi() % dirs.size()]
+		var want := rng.randi_range(params.get("snake_min", 10), params.get("snake_max", 20))
+		var body := _grow(rng, st, hd, d, want, params.get("snake_turn", 0.45), 0.0, params.get("curl", 0.75))
+		body = _trim_cycles(p, st, body, d, params.min_len)
+		if body.size() < maxi(params.min_len, want / 2):
+			continue
+		_commit(p, st, body, d)
+		filled += body.size()
+		placed_snakes += 1
 	for phase in 2:
 		var max_len: int = params.max_len if phase == 0 else mini(5, params.max_len)
 		var tries := w * h * 6 if phase == 0 else int(w * h * params.get("fill_pass", 4.0))
@@ -223,12 +270,17 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 					continue
 				var ahead := {}
 				var c: Vector2i = hd + d
+				var blocked := false
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 					var o: int = st.occ[c.y * w + c.x]
-					if o != -1:
+					if o == ROCK:
+						blocked = true
+						break
+					if o >= 0:
 						ahead[o] = true
 					c += d
-				opts.append([d, ahead.size()])
+				if not blocked:
+					opts.append([d, ahead.size()])
 			if opts.is_empty():
 				continue
 			var d: Vector2i
@@ -238,7 +290,7 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 				d = opts[0][0]
 			else:
 				d = opts[rng.randi() % opts.size()][0]
-			var body := _grow(rng, st, hd, d, _pick_len(rng, params, max_len), params.turn, chain_bias)
+			var body := _grow(rng, st, hd, d, _pick_len(rng, params, max_len), params.turn, chain_bias, params.get("curl_mid", 0.0))
 			body = _trim_cycles(p, st, body, d, params.min_len)
 			if body.size() < params.min_len:
 				continue
@@ -246,6 +298,21 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 			filled += body.size()
 	_extend_tails(rng, p, st, params, chain_bias)
 	return p
+
+
+## ¿Puede apuntar la cabeza en hd hacia d? (casilla de detrás libre y ninguna roca delante)
+static func _dir_ok(st: Dictionary, hd: Vector2i, d: Vector2i) -> bool:
+	var w: int = st.w
+	var h: int = st.h
+	var b: Vector2i = hd - d
+	if b.x < 0 or b.y < 0 or b.x >= w or b.y >= h or st.occ[b.y * w + b.x] != -1:
+		return false
+	var c: Vector2i = hd + d
+	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+		if st.occ[c.y * w + c.x] == ROCK:
+			return false
+		c += d
+	return true
 
 
 static func _ray_cells(w: int, h: int, hd: Vector2i, d: Vector2i) -> Array:
@@ -280,7 +347,7 @@ static func _trim_cycles(p: Dictionary, st: Dictionary, body: Array, d: Vector2i
 	var w: int = st.w
 	var ahead := {}  # flechas que la nueva tendría delante (las espera)
 	for k in _ray_cells(w, st.h, body[body.size() - 1], d):
-		if st.occ[k] != -1:
+		if st.occ[k] >= 0:
 			ahead[st.occ[k]] = true
 	while body.size() >= min_len:
 		var behind := {}  # flechas que pasarían a esperar a la nueva
@@ -300,7 +367,7 @@ static func _commit(p: Dictionary, st: Dictionary, body: Array, d: Vector2i) -> 
 	st.waits.append({})
 	var ray := _ray_cells(w, st.h, body[body.size() - 1], d)
 	for k in ray:
-		if st.occ[k] != -1:
+		if st.occ[k] >= 0:
 			st.waits[idx][st.occ[k]] = true
 	for c in body:
 		_occupy(st, c, idx)
@@ -330,7 +397,7 @@ static func _occupy(st: Dictionary, c: Vector2i, idx: int) -> void:
 ## Hace crecer el cuerpo hacia atrás desde la cabeza (devuelve cola..cabeza). Con
 ## probabilidad chain_bias prefiere pasar por caminos de flechas libres para taparlas.
 static func _grow(rng: RandomNumberGenerator, st: Dictionary, hd: Vector2i, d: Vector2i,
-		want: int, turn: float, chain_bias: float) -> Array:
+		want: int, turn: float, chain_bias: float, curl := 0.0) -> Array:
 	var w: int = st.w
 	var h: int = st.h
 	var ray := {}
@@ -343,9 +410,17 @@ static func _grow(rng: RandomNumberGenerator, st: Dictionary, hd: Vector2i, d: V
 	var used := {hd: true, b: true}
 	var step := d
 	var cur := b
+	var sense := 1 if rng.randf() < 0.5 else -1  # sentido de giro preferido (espirales)
 	while body.size() < want:
 		var perp := [Vector2i(step.y, step.x), Vector2i(-step.y, -step.x)]
-		Rng.shuffle(perp, rng)
+		if curl > 0.0:
+			# Enroscarse: casi siempre se gira hacia el mismo lado, y a veces se cambia.
+			if rng.randf() < 0.1:
+				sense = -sense
+			var pref: Vector2i = Vector2i(-step.y, step.x) * sense
+			perp = [pref, -pref] if rng.randf() < curl else [-pref, pref]
+		else:
+			Rng.shuffle(perp, rng)
 		var opts := [perp[0], perp[1], step] if rng.randf() < turn else [step, perp[0], perp[1]]
 		var valid := []
 		for s in opts:
@@ -376,12 +451,12 @@ static func _grow(rng: RandomNumberGenerator, st: Dictionary, hd: Vector2i, d: V
 ## Largo de una flecha: corta, media o larga según las proporciones del nivel.
 static func _pick_len(rng: RandomNumberGenerator, params: Dictionary, max_len: int) -> int:
 	var lo: int = params.min_len
-	var mid := maxi(lo + 1, max_len / 3)
 	var r := rng.randf()
-	if r < params.get("long_ratio", 0.15):
-		return rng.randi_range(maxi(mid, max_len / 2), max_len)
-	if r < params.get("long_ratio", 0.15) + 0.45:
-		return rng.randi_range(mini(lo + 2, mid), mid)
+	var long_ratio: float = params.get("long_ratio", 0.2)
+	if r < long_ratio:
+		return rng.randi_range(mini(10, max_len), max_len)
+	if r < long_ratio + 0.45:
+		return rng.randi_range(mini(5, max_len), mini(10, max_len))
 	return rng.randi_range(lo, mini(lo + 2, max_len))
 
 
@@ -391,6 +466,7 @@ static func _extend_tails(rng: RandomNumberGenerator, p: Dictionary, st: Diction
 	var w: int = p.w
 	var h: int = p.h
 	var cap: int = int(params.max_len * 1.4)
+	var snake_cap: int = params.get("snake_max", cap)
 	var order := range(p.arrows.size())
 	for _round in params.get("extend_rounds", 4):
 		Rng.shuffle(order, rng)
@@ -401,7 +477,8 @@ static func _extend_tails(rng: RandomNumberGenerator, p: Dictionary, st: Diction
 			for rk in st.ray_cells[k]:
 				own[rk] = true
 			var me := {k: true}
-			while a.cells.size() < cap:
+			var my_cap: int = snake_cap if a.cells.size() > cap else cap
+			while a.cells.size() < my_cap:
 				var tail: Vector2i = a.cells[0]
 				var opts := DIRS.duplicate()
 				Rng.shuffle(opts, rng)
