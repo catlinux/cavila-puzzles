@@ -1,0 +1,53 @@
+name: Android APK
+
+# Compila un APK de depuración (firmado con una clave de depuración efímera) y lo sube como artefacto.
+# Descárgalo desde la pestaña Actions -> la ejecución -> Artifacts, e instálalo en el móvil.
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.3"
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    container: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Importar recursos
+        run: godot --headless --import || true
+      - name: Tests de lógica
+        run: godot --headless --path . --script tests/run_tests.gd -- --quick
+      - name: Humo de la UI
+        run: godot --headless --path . res://tests/smoke.tscn
+
+  apk:
+    needs: tests
+    runs-on: ubuntu-latest
+    container: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Plantillas de exportación
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates
+          cp -r /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/ 2>/dev/null || true
+      - name: Clave de depuración
+        run: |
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            -keystore /root/debug.keystore -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+      - name: Importar y exportar APK
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: |
+          mkdir -p build
+          godot --headless --import || true
+          godot --headless --verbose --export-debug "Android" build/cavila.apk
+          ls -la build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cavila-debug-apk
+          path: build/cavila.apk
