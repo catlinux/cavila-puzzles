@@ -49,7 +49,8 @@ func begin(new_mode: String, n: int = 1, key: String = "") -> void:
 
 
 var _cache := {}  # tableros ya generados (la miniatura del inicio y la partida comparten)
-var _mutex := Mutex.new()
+var _mutex := Mutex.new()      # protege la caché de tableros
+var _gen_mutex := Mutex.new()  # una sola generación a la vez (ver generate_locked)
 var _thread: Thread
 var _prefetching := -1
 
@@ -75,8 +76,18 @@ func puzzle_for_level(n: int) -> Dictionary:
 		_mutex.unlock()
 		if not cached.is_empty():
 			return cached
-	var p := Arrows.generate(Levels.seed_for(n), Levels.params_for(n))
+	var p := generate_locked(Levels.seed_for(n), Levels.params_for(n))
 	_store(key, p)
+	return p
+
+
+## El generador no admite dos ejecuciones simultáneas (comparte estado interno y el resultado
+## cambiaría según el momento), así que TODAS las generaciones pasan por este candado: la
+## precarga en segundo plano y la del hilo principal nunca se solapan.
+func generate_locked(seed_value: int, params: Dictionary) -> Dictionary:
+	_gen_mutex.lock()
+	var p := Arrows.generate(seed_value, params)
+	_gen_mutex.unlock()
 	return p
 
 
@@ -98,7 +109,7 @@ func prefetch(n: int) -> void:
 	_prefetching = n
 	_thread = Thread.new()
 	_thread.start(func():
-		var p := Arrows.generate(Levels.seed_for(n), Levels.params_for(n))
+		var p := generate_locked(Levels.seed_for(n), Levels.params_for(n))
 		_store("L%d" % n, p))
 
 
@@ -120,7 +131,7 @@ func puzzle_for_daily(key: String) -> Dictionary:
 	var cached: Dictionary = _cache.get(k, {})
 	_mutex.unlock()
 	if cached.is_empty():
-		cached = Arrows.generate(Daily.seed_for(key), Daily.params_for(key))
+		cached = generate_locked(Daily.seed_for(key), Daily.params_for(key))
 		_store(k, cached)
 	return cached
 

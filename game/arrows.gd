@@ -44,12 +44,28 @@ static func occupancy(p: Dictionary, removed: Dictionary = {}) -> PackedInt32Arr
 	return occ
 
 
-## Casillas por las que pasa la cabeza al salir, hasta el borde.
+## Máscara de huecos (1 = hueco), cacheada en el propio puzle.
+static func _hole_mask(p: Dictionary) -> PackedByteArray:
+	if not p.has("_hm"):
+		var m := PackedByteArray()
+		m.resize(p.w * p.h)
+		for c in p.get("holes", []):
+			m[c.y * p.w + c.x] = 1
+		p["_hm"] = m
+	return p["_hm"]
+
+
+## Casillas por las que pasa la cabeza al salir. Termina en el borde del tablero o en el
+## primer hueco: un hueco está FUERA del tablero, así que la flecha que llega a él ya ha
+## salido y no puede volver a entrar ni chocar con nada que haya más allá.
 static func exit_path(p: Dictionary, i: int) -> Array:
 	var a: Dictionary = p.arrows[i]
+	var hm := _hole_mask(p)
 	var out := []
 	var c: Vector2i = head(a) + a.dir
 	while inside(p, c):
+		if hm[c.y * p.w + c.x] == 1:
+			break
 		out.append(c)
 		c += a.dir
 	return out
@@ -277,6 +293,8 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 				var blocked := false
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 					var o: int = st.occ[c.y * w + c.x]
+					if o == HOLE:
+						break  # fuera del tablero: ya ha salido
 					if o == ROCK:
 						blocked = true
 						break
@@ -290,7 +308,7 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 			var d: Vector2i
 			if rng.randf() < long_bias:
 				# Apuntar hacia otras flechas: más dependencias, menos flechas "regaladas".
-				opts.sort_custom(func(x, y): return x[1] > y[1])
+				_sort_by(opts, 1, true)
 				d = opts[0][0]
 			else:
 				d = opts[rng.randi() % opts.size()][0]
@@ -313,16 +331,37 @@ static func _dir_ok(st: Dictionary, hd: Vector2i, d: Vector2i) -> bool:
 		return false
 	var c: Vector2i = hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
-		if st.occ[c.y * w + c.x] == ROCK:
+		var o: int = st.occ[c.y * w + c.x]
+		if o == HOLE:
+			break
+		if o == ROCK:
 			return false
 		c += d
 	return true
 
 
-static func _ray_cells(w: int, h: int, hd: Vector2i, d: Vector2i) -> Array:
+## Casillas del camino de salida (índices). Se detiene en el primer hueco, igual que exit_path.
+## Ordenación ESTABLE por el elemento `col` de cada fila (los empates conservan su orden).
+## Se evita sort_custom: su orden con empates no está garantizado y no hace falta depender de él
+## para que cada nivel salga igual en cualquier dispositivo y en cualquier hilo.
+static func _sort_by(arr: Array, col: int, descending: bool) -> void:
+	for i in range(1, arr.size()):
+		var item = arr[i]
+		var key = item[col]
+		var j := i - 1
+		while j >= 0 and (arr[j][col] < key if descending else arr[j][col] > key):
+			arr[j + 1] = arr[j]
+			j -= 1
+		arr[j + 1] = item
+
+
+static func _ray_cells(st: Dictionary, hd: Vector2i, d: Vector2i) -> Array:
+	var w: int = st.w
 	var out := []
 	var c := hd + d
-	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < st.h:
+		if st.occ[c.y * w + c.x] == HOLE:
+			break
 		out.append(c.y * w + c.x)
 		c += d
 	return out
@@ -350,7 +389,7 @@ static func _reaches(st: Dictionary, from: Dictionary, targets: Dictionary) -> b
 static func _trim_cycles(p: Dictionary, st: Dictionary, body: Array, d: Vector2i, min_len: int) -> Array:
 	var w: int = st.w
 	var ahead := {}  # flechas que la nueva tendría delante (las espera)
-	for k in _ray_cells(w, st.h, body[body.size() - 1], d):
+	for k in _ray_cells(st, body[body.size() - 1], d):
 		if st.occ[k] >= 0:
 			ahead[st.occ[k]] = true
 	while body.size() >= min_len:
@@ -369,7 +408,7 @@ static func _commit(p: Dictionary, st: Dictionary, body: Array, d: Vector2i) -> 
 	var idx: int = p.arrows.size()
 	p.arrows.append({"cells": body, "dir": d})
 	st.waits.append({})
-	var ray := _ray_cells(w, st.h, body[body.size() - 1], d)
+	var ray := _ray_cells(st, body[body.size() - 1], d)
 	for k in ray:
 		if st.occ[k] >= 0:
 			st.waits[idx][st.occ[k]] = true
@@ -407,6 +446,8 @@ static func _grow(rng: RandomNumberGenerator, st: Dictionary, hd: Vector2i, d: V
 	var ray := {}
 	var c := hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+		if st.occ[c.y * w + c.x] == HOLE:
+			break
 		ray[c] = true
 		c += d
 	var b := hd - d
@@ -554,6 +595,10 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 		blocked[c.y * w + c.x] = 1
 	var rock := PackedByteArray()
 	rock.resize(w * h)
+	var hole := PackedByteArray()
+	hole.resize(w * h)
+	for c in p.holes:
+		hole[c.y * w + c.x] = 1
 	for c in p.rocks:
 		blocked[c.y * w + c.x] = 1
 		rock[c.y * w + c.x] = 1
@@ -589,6 +634,8 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 				var deps := {}
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 					var k := c.y * w + c.x
+					if hole[k] == 1:
+						break  # fuera del tablero: ya ha salido
 					if occ[k] != -1 or rock[k] == 1:
 						ok = false
 						break
@@ -619,6 +666,8 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 						var ok := true
 						while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 							var kk := c.y * w + c.x
+							if hole[kk] == 1:
+								break
 							if occ[kk] != -1 or rock[kk] == 1:
 								ok = false
 								break
@@ -642,7 +691,7 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 			continue
 		var pick: Array
 		if rng.randf() < greed:
-			cands.sort_custom(func(a, b): return a[2] > b[2])
+			_sort_by(cands, 2, true)
 			pick = cands[rng.randi() % mini(3, cands.size())]
 		else:
 			pick = cands[rng.randi() % cands.size()]
@@ -706,7 +755,7 @@ static func _path_cover(rng: RandomNumberGenerator, w: int, h: int, blocked: Pac
 				var pick: Array = opts[rng.randi() % opts.size()]
 				var r := rng.randf()
 				if r < 0.65:
-					opts.sort_custom(func(a, b): return a[2] < b[2])
+					_sort_by(opts, 2, false)
 					pick = opts[0]
 				elif r < 0.65 + (1.0 - turn) * 0.35:
 					for o in opts:

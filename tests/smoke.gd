@@ -173,13 +173,74 @@ func _run() -> void:
 		var cb: Vector2 = Vector2(pair[2]) + Vector2(0.5, 0.5)
 		var cf: Vector2 = Vector2(pair[3]) + Vector2(0.5, 0.5)
 		var edge: Vector2 = vt._origin + cb.lerp(cf, 0.42) * vt._cell  # algo más cerca de la bloqueada
-		check(vt.arrow_at(edge) == pair[1], "toque dudoso: se elige la flecha que puede salir")
+		var got_a: int = vt.arrow_at(edge)
+		var qd: Vector2 = (edge - vt._origin) / vt._cell - Vector2(0.5, 0.5)
+		check(got_a == pair[1], "toque dudoso: se elige la flecha que puede salir (nivel=%d modo=%s hash=%d arrows=%d got=%d pair=%s cell=%.1f board=%s d_blq=%.2f d_libre=%.2f d_got=%.2f)" % [
+			Game.level, Game.mode, hash(var_to_str(vt.puzzle.arrows)), vt.puzzle.arrows.size(), got_a, str(pair), vt._cell, str(vt.board.size), vt._dist_to_arrow(pair[0], qd), vt._dist_to_arrow(pair[1], qd),
+			vt._dist_to_arrow(got_a, qd) if got_a >= 0 else -1.0])
 		var center: Vector2 = vt._origin + cb * vt._cell
 		check(vt.arrow_at(center) == pair[0], "toque claro en una bloqueada: cuenta como esa (sin abusos)")
 		var far: Vector2 = vt._origin + (cb + Vector2(0, 0) + (cb - cf) * 0.0) * vt._cell
 		check(vt.arrow_at(vt._origin + Vector2(-5, -5) * vt._cell) == -1, "tocar fuera del tablero no selecciona nada")
 	vt.queue_free()
 	await _frames(1)
+
+	# Salir por un hueco = salir del tablero: la flecha sale (sin perder luz) aunque más allá
+	# del hueco haya otras flechas, y desaparece enseguida.
+	var found_lv := -1
+	var found_i := -1
+	var Levels = load("res://game/levels.gd")
+	for lv in range(30, 140):
+		var par = Levels.params_for(lv)
+		if par.holes.is_empty():
+			continue
+		var pz = Arrows.generate(Levels.seed_for(lv), par)
+		var hs := {}
+		for hc in pz.holes:
+			hs[hc] = true
+		var oc = Arrows.occupancy(pz)
+		for i in pz.arrows.size():
+			var ar = pz.arrows[i]
+			var cc = Arrows.head(ar) + ar.dir
+			var crossed := false
+			while Arrows.inside(pz, cc) and found_i == -1:
+				if hs.has(cc):
+					crossed = true
+				elif crossed and oc[cc.y * pz.w + cc.x] >= 0 and Arrows.can_exit(pz, i, oc):
+					found_lv = lv
+					found_i = i
+				cc += ar.dir
+			if found_i != -1:
+				break
+		if found_i != -1:
+			break
+	check(found_i != -1, "hay un nivel con una flecha que sale por un hueco con algo más allá")
+	if found_i != -1:
+		var vh = await _play("level", found_lv)
+		var lives0: int = Game.lives
+		check(vh.tap_arrow(found_i) == "exit" and Game.lives == lives0, "la flecha que sale por un hueco sale sin chocar")
+		check(vh._exit_hole[found_i], "su animación es de salida por hueco")
+		await get_tree().create_timer(0.7).timeout
+		check(vh._gone.has(found_i), "desaparece enseguida tras salir del tablero")
+		vh.queue_free()
+		await _frames(1)
+
+	# Determinismo con la precarga en segundo plano: lo que sale de Game es idéntico a generar el
+	# nivel en solitario, aunque se solapen la precarga y la generación del hilo principal.
+	var Lv = load("res://game/levels.gd")
+	var det_bad := 0
+	for rep in 12:
+		Game._cache.clear()
+		Game.prefetch(301)
+		var mine: Dictionary = Game.puzzle_for_level(300)  # se solapa con la precarga de 301
+		Game.begin("level", 300)  # reutiliza el hilo si sigue vivo
+		await _frames(1)
+		var solo300 = Game.generate_locked(Lv.seed_for(300), Lv.params_for(300))
+		var pre301: Dictionary = Game.puzzle_for_level(301)
+		var solo301 = Game.generate_locked(Lv.seed_for(301), Lv.params_for(301))
+		if var_to_str(mine.arrows) != var_to_str(solo300.arrows) or var_to_str(pre301.arrows) != var_to_str(solo301.arrows):
+			det_bad += 1
+	check(det_bad == 0, "los niveles son idénticos con y sin precarga solapada (%d de 12 distintos)" % det_bad)
 
 	# Choques: tocar flechas bloqueadas resta luces y al tercer choque se pierde.
 	var v2 = await _play("level", 300)

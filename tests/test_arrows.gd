@@ -85,6 +85,73 @@ func run() -> void:
 		check(all_ok, "la solución se puede jugar paso a paso " + tag)
 	print("    generador: %d niveles en %d ms (peor %d ms)" % [samples.size(), Time.get_ticks_msec() - t0, worst])
 
+	# Salir por un hueco = salir del tablero: no se puede reentrar ni chocar más allá.
+	# Columna 0 de 3x5: A apunta hacia arriba desde abajo; (0,2) es un hueco; más arriba, en
+	# (0,0)-(1,0), hay otra flecha B. Antes A chocaba con B tras "reentrar"; ahora A ya ha salido.
+	var reent := {"w": 3, "h": 5, "rocks": [], "holes": [Vector2i(0, 2)], "arrows": [
+		_arrow([Vector2i(0, 4), Vector2i(0, 3)]),
+		_arrow([Vector2i(0, 0), Vector2i(1, 0)])]}
+	check(Arrows.validate(reent).ok, "tablero de reentrada válido")
+	check(Arrows.exit_path(reent, 0).is_empty(), "la salida termina en el hueco")
+	var reent_occ := Arrows.occupancy(reent)
+	check(Arrows.blocker(reent, 0, reent_occ).by == -1, "A sale: lo que hay más allá del hueco no cuenta")
+	check(Arrows.solve(reent).free0 == 2, "las dos flechas pueden salir desde el principio")
+	# Un obstáculo más allá del hueco tampoco bloquea.
+	var reent_rock := reent.duplicate(true)
+	reent_rock.erase("_hm")
+	reent_rock.rocks = [Vector2i(0, 1)]
+	reent_rock.arrows.pop_back()
+	check(Arrows.validate(reent_rock).ok and Arrows.blocker(reent_rock, 0, Arrows.occupancy(reent_rock)).by == -1, "una roca más allá del hueco no bloquea")
+	# Sin hueco, la misma flecha SÍ choca con la que tiene delante (comportamiento normal).
+	var no_hole := reent.duplicate(true)
+	no_hole.erase("_hm")
+	no_hole.holes = []
+	check(Arrows.blocker(no_hole, 0, Arrows.occupancy(no_hole)).by == 1, "sin hueco, la flecha choca con la de delante")
+	# Propiedad sobre niveles reales con huecos: la salida es exactamente el tramo hasta el hueco.
+	var wh_levels := 0
+	var wh_cases := 0
+	var wh_bad := 0
+	for lv in range(20, 260, 3):
+		var par3 := Levels.params_for(lv)
+		if par3.holes.is_empty():
+			continue
+		var g3 := Arrows.generate(Levels.seed_for(lv), par3)
+		if g3.is_empty():
+			continue
+		wh_levels += 1
+		var holes3 := {}
+		for c in g3.holes:
+			holes3[c] = true
+		var occ3 := Arrows.occupancy(g3)
+		for i in g3.arrows.size():
+			var a3: Dictionary = g3.arrows[i]
+			var raw := []
+			var cc: Vector2i = Arrows.head(a3) + a3.dir
+			var crossed := false
+			var behind := false
+			while Arrows.inside(g3, cc):
+				if holes3.has(cc):
+					crossed = true
+				elif crossed:
+					if occ3[cc.y * g3.w + cc.x] != -1:
+						behind = true
+				else:
+					raw.append(cc)
+				cc += a3.dir
+			if Arrows.exit_path(g3, i) != raw:
+				wh_bad += 1
+			var free_expected := true
+			for c in raw:
+				if occ3[c.y * g3.w + c.x] != -1 and occ3[c.y * g3.w + c.x] != i:
+					free_expected = false
+			if Arrows.can_exit(g3, i, occ3) != free_expected:
+				wh_bad += 1
+			if behind:
+				wh_cases += 1
+		check(Arrows.solve(g3).solvable and Arrows.validate(g3).ok, "nivel %d con huecos: válido y resoluble" % lv)
+	check(wh_levels >= 20, "se han revisado niveles con huecos (%d)" % wh_levels)
+	check(wh_bad == 0, "la salida respeta los huecos en todos los niveles (%d fallos, %d casos con algo más allá)" % [wh_bad, wh_cases])
+
 	# Formas y obstáculos.
 	var rock_p := {"w": 5, "h": 3, "rocks": [Vector2i(4, 1)], "holes": [Vector2i(0, 0)], "arrows": [_arrow([Vector2i(1, 1), Vector2i(2, 1)])]}
 	check(Arrows.validate(rock_p).reason == "rock_block", "una roca no puede tapar una salida")

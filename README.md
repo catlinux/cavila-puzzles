@@ -22,6 +22,8 @@ se sintetiza por código. Textos en **español** y **catalán**.
   serpentean y llenan todo el tablero. Se generan cubriendo el tablero con caminos largos (regla de
   Warnsdorff) y fijando la punta de cada uno con una simulación inversa de la partida, lo que
   garantiza la solución.
+- **Reglas de salida**: una flecha que llega a un hueco (fuera del tablero) ya ha salido: no puede
+  reentrar ni chocar con nada de más allá. Las rocas, en cambio, son infranqueables.
 - **Zoom** pellizcando y desplazamiento arrastrando en los tableros grandes.
 - **Puntuación** por nivel (flechas, dificultad, errores, combos y rapidez) con récord personal, y un
   **rival de la máquina** que avanza a su ritmo mientras juegas.

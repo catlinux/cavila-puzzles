@@ -24,6 +24,7 @@ var _flash := {}       # flecha -> segundos de destello coral
 var _tracks: Array = []  # recorrido de cada flecha en coordenadas de casilla
 var _boxes: Array = []   # rectángulo que ocupa cada flecha (para descartar rápido al tocar)
 var _exit_len: Array = []
+var _exit_hole: Array = []  # true si la salida termina en un hueco (no en el borde del tablero)
 var _particles: Array = []
 var _hint_until := 0.0
 var _shake := 0.0
@@ -215,6 +216,7 @@ func _prepare() -> void:
 	_occ = Arrows.occupancy(puzzle)
 	_tracks.clear()
 	_exit_len.clear()
+	_exit_hole.clear()
 	_boxes.clear()
 	for i in puzzle.arrows.size():
 		var a: Dictionary = puzzle.arrows[i]
@@ -231,6 +233,15 @@ func _prepare() -> void:
 			tr_pts.append(hd + Vector2(a.dir) * k)
 		_tracks.append(tr_pts)
 		_exit_len.append(r)
+		# La salida termina en un hueco si la casilla siguiente a su último tramo sigue dentro de la
+		# cuadrícula (si no, ha llegado al borde del tablero).
+		_exit_hole.append(Arrows.inside(puzzle, Arrows.head(a) + a.dir * (r + 1)))
+
+
+## Cuánto se tarda en desvanecerse una flecha que sale (en casillas de recorrido). Al salir por
+## un hueco desaparece enseguida: ya está fuera del tablero y no debe sobrevolar el resto.
+func _fade_len(i: int) -> float:
+	return 3.0 if _exit_hole[i] else float(puzzle.arrows[i].cells.size() + 1)
 
 
 func _update_moves() -> void:
@@ -255,7 +266,7 @@ func tap_arrow(i: int) -> String:
 	if bl.by == -1:
 		removed[i] = true
 		_occ = Arrows.occupancy(puzzle, removed)
-		_anims[i] = {"kind": "exit", "t": 0.0, "v": 7.0, "end": float(_exit_len[i] + a.cells.size() + 1)}
+		_anims[i] = {"kind": "exit", "t": 0.0, "v": 7.0, "end": float(_exit_len[i]) + _fade_len(i)}
 		_combo = _combo + 1 if _clock - _last_exit < 1.2 else 1
 		if _combo >= 3:
 			_combo_points += 5 * (_combo - 2)
@@ -637,7 +648,7 @@ func _draw_arrow(c: CanvasItem, i: int) -> void:
 	var t := _offset(i)
 	var alpha := 1.0
 	if _anims.has(i) and _anims[i].kind == "exit" and t > _exit_len[i]:
-		alpha = clampf(1.0 - (t - _exit_len[i]) / (a.cells.size() + 1.0), 0.0, 1.0)
+		alpha = clampf(1.0 - (t - _exit_len[i]) / _fade_len(i), 0.0, 1.0)
 	var pts := _round_corners(_window(i, t), _cell * CORNER_RADIUS)
 	var col: Color = Style.INK
 	var wdt := maxf(3.0, _cell * 0.15)
