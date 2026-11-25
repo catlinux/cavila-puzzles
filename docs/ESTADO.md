@@ -14,7 +14,7 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 - Regenerar / ampliar: `tools/bake_levels.gd` (`COUNT`). En paralelo: 4 procesos con `-- desde hasta trozo.bin` y luego `-- --merge trozos...` (~1 min en total). **Ojo:** volver a hornear con un generador distinto cambia niveles que la gente ya ha jugado.
 
 ## Reglas ya implementadas
-- Una flecha que sale del tablero desaparece y no puede volver a entrar ni chocar más allá.
+- Una flecha solo sale por el borde exterior; los huecos se cruzan como vacío y lo de más allá bloquea.
 - Las rocas son infranqueables.
 - Tableros hasta 32x50 hacia el nivel ~150, con formas variadas, flechas largas tipo serpiente y niveles tipo laberinto.
 - Categorías de dificultad (respiro, normal, difícil, súper difícil, extra) intercaladas.
