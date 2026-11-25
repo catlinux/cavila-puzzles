@@ -16,7 +16,7 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 - Zoom y desplazamiento con pellizco; música ambiente con deslizadores; sonidos zen; vibración suave.
 - Esquinas de flecha redondeadas (`CORNER_RADIUS` 0.2 en `ui/play.gd`).
 - Fondo del tablero con margen amplio (0,62 casillas) y esquinas grandes: contorno suave, flechas del borde claramente dentro. Puntos del fondo más marcados (`DOT_COL`).
-- Animación de salida: impulso hacia atrás (`WIND_UP`), aceleración, brillo del color del mundo, contorno blanco (se distingue de las que pasan por debajo) y estela de partículas. El candidato al tocar también lleva contorno blanco.
+- Las flechas que salen por un hueco lo hacen por un pasillo de fondo blanco (`_corridor`, las 3 casillas que tarda en desvanecerse), no pegadas al borde. Contorno blanco fino en la flecha que sale o se toca. La animación de salida es la original (se probó impulso+estela+brillo y no gustó: descartado).
 
 ## Entrada táctil (ui/play.gd)
 Pulsar resalta la flecha candidata y soltar la activa. El radio de toque (~46 px) se adapta a la casilla y

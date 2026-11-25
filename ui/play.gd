@@ -53,6 +53,7 @@ var _zoom0 := 1.0
 var _last_mid := Vector2.ZERO
 var _fit_btn: Control
 var _holes := {}
+var _corridor := {}  # huecos por los que salen las flechas: se pintan como tablero
 var _fx: Control  # capa de piezas en movimiento, destellos y partículas
 var _dyn_key := ""
 var piece_style := "arrows"
@@ -268,7 +269,7 @@ func tap_arrow(i: int) -> String:
 	if bl.by == -1:
 		removed[i] = true
 		_occ = Arrows.occupancy(puzzle, removed)
-		_anims[i] = {"kind": "exit", "t": 0.0, "v": 3.0, "wind": WIND_UP, "end": float(_exit_len[i]) + _fade_len(i)}
+		_anims[i] = {"kind": "exit", "t": 0.0, "v": 7.0, "end": float(_exit_len[i]) + _fade_len(i)}
 		_combo = _combo + 1 if _clock - _last_exit < 1.2 else 1
 		if _combo >= 3:
 			_combo_points += 5 * (_combo - 2)
@@ -368,16 +369,8 @@ func _process(delta: float) -> void:
 	for i in _anims.keys():
 		var an: Dictionary = _anims[i]
 		if an.kind == "exit":
-			if an.wind > 0.0:
-				an.wind -= delta
-				continue
-			an.v += 90.0 * delta
+			an.v += 75.0 * delta
 			an.t += an.v * delta
-			# Estela de partículas desde la punta.
-			var w := _window(i, an.t)
-			if w.size() > 0 and an.t < _exit_len[i]:
-				_particles.append({"p": w[w.size() - 1], "v": Vector2(randf_range(-30, 30), randf_range(-30, 30)),
-					"life": 0.28, "max": 0.28, "size": maxf(2.5, _cell * 0.1), "col": world.a})
 			if an.t >= an.end:
 				_anims.erase(i)
 				_gone[i] = true
@@ -524,7 +517,6 @@ func _clamp_pan() -> void:
 
 
 ## Radio del dedo (px de pantalla de diseño) y margen para preferir una flecha libre.
-const WIND_UP := 0.09  # segundos de impulso hacia atrás antes de salir
 const DOT_COL := Color8(196, 204, 221)  # puntos del fondo, más marcados que Style.DOT
 const FINGER_PX := 46.0
 const FAIR_PX := 22.0
@@ -614,8 +606,6 @@ func _offset(i: int) -> float:
 		return 0.0
 	var an: Dictionary = _anims[i]
 	if an.kind == "exit":
-		if an.wind > 0.0:  # se echa un poco atrás, como tomando impulso
-			return -0.28 * sin((1.0 - an.wind / WIND_UP) * PI * 0.5)
 		return an.t
 	var p: float = an.tau / an.dur
 	if p < 1.0:
@@ -694,11 +684,9 @@ func _draw_arrow(c: CanvasItem, i: int) -> void:
 		col = col.lerp(world.a, 0.6)
 	col.a = alpha
 	var moving: bool = _anims.has(i) and _anims[i].kind == "exit"
-	if moving:
-		_stroke(c, pts, Color(world.a, 0.18 * alpha), wdt * 3.4)  # brillo del color del mundo
 	if moving or (i == _cand and not _anims.has(i)):
 		# Contorno blanco: la pieza se distingue de las que pasan por debajo.
-		_stroke(c, pts, Color(Style.CARD, 0.92 * alpha), wdt + maxf(4.0, _cell * 0.16))
+		_stroke(c, pts, Color(Style.CARD, 0.92 * alpha), wdt + maxf(3.0, _cell * 0.1))
 	var d := Vector2(a.dir)
 	if pts.size() >= 2 and pts[pts.size() - 1].distance_to(pts[pts.size() - 2]) > 0.01:
 		d = (pts[pts.size() - 1] - pts[pts.size() - 2]).normalized()
@@ -780,6 +768,15 @@ func _draw_shape() -> void:
 		Style.soft_shadow(board, card, 44.0, Style.SHADOW, 22.0, Vector2(0, 12))
 		Style.fill_round(board, card, 44.0, Style.CARD)
 		return
+	if _corridor.is_empty():
+		for i in puzzle.arrows.size():
+			if _exit_hole[i]:
+				var hd: Vector2i = Arrows.head(puzzle.arrows[i]) + puzzle.arrows[i].dir * (_exit_len[i] + 1)
+				for k in 3:  # lo que tarda en desvanecerse al salir
+					var cc: Vector2i = hd + puzzle.arrows[i].dir * k
+					if Arrows.inside(puzzle, cc):
+						_corridor[cc] = true
+		_corridor[Vector2i(-1, -1)] = true  # marca de "ya calculado"
 	# Casillas solapadas con esquinas poco redondeadas: el borde queda escalonado y limpio.
 	# Margen amplio y esquinas grandes: los entrantes se suavizan y las flechas del borde
 	# quedan claramente dentro del tablero.
@@ -788,7 +785,7 @@ func _draw_shape() -> void:
 	for pass_i in 2:
 		for y in puzzle.h:
 			for x in puzzle.w:
-				if _holes.has(Vector2i(x, y)):
+				if _holes.has(Vector2i(x, y)) and not _corridor.has(Vector2i(x, y)):
 					continue
 				var r := Rect2(_origin + Vector2(x, y) * _cell, Vector2(_cell, _cell)).grow(g)
 				if pass_i == 0:
