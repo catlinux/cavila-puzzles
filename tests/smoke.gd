@@ -125,12 +125,32 @@ func _run() -> void:
 	vz._board_input(_touch(0, true, pos))
 	vz._board_input(_touch(0, false, pos))
 	check(vz.removed.has(free_i), "un toque con el dedo saca la flecha")
-	var other: int = Arrows.free_arrows(vz.puzzle, vz.removed)[0]
-	var pos2: Vector2 = vz._origin + (Vector2(vz.puzzle.arrows[other].cells[0]) + Vector2(0.5, 0.5)) * vz._cell
-	vz._board_input(_touch(0, true, pos2))
-	vz._board_input(_drag(0, pos2 + Vector2(120, 0)))
-	vz._board_input(_touch(0, false, pos2 + Vector2(120, 0)))
-	check(not vz.removed.has(other), "un arrastre no cuenta como toque")
+	# Se ilumina la flecha elegida al apoyar el dedo, el resaltado sigue al dedo y se activa al soltar.
+	var fa := -1
+	var fb := -1
+	for x in Arrows.free_arrows(vz.puzzle, vz.removed):
+		var px: Vector2 = vz._origin + (Vector2(vz.puzzle.arrows[x].cells[0]) + Vector2(0.5, 0.5)) * vz._cell
+		if vz.arrow_at(px) == x:
+			if fa == -1:
+				fa = x
+			elif fb == -1:
+				fb = x
+	check(fa != -1 and fb != -1, "hay dos flechas libres distinguibles")
+	var pa: Vector2 = vz._origin + (Vector2(vz.puzzle.arrows[fa].cells[0]) + Vector2(0.5, 0.5)) * vz._cell
+	var pb: Vector2 = vz._origin + (Vector2(vz.puzzle.arrows[fb].cells[0]) + Vector2(0.5, 0.5)) * vz._cell
+	vz._board_input(_touch(0, true, pa))
+	check(vz._cand == fa and vz.removed.size() == 1, "al apoyar el dedo se ilumina la flecha y todavía no se activa")
+	vz._board_input(_drag(0, pb))
+	check(vz._cand == fb, "el resaltado sigue al dedo")
+	vz._board_input(_touch(0, false, pb))
+	check(vz.removed.has(fb) and not vz.removed.has(fa) and vz._cand == -1, "al soltar se activa la flecha de debajo del dedo")
+	# Deslizar a un punto vacío y soltar cancela, sin gastar luz.
+	var lives_c: int = Game.lives
+	vz._board_input(_touch(0, true, pa))
+	vz._board_input(_drag(0, Vector2(-400.0, -400.0)))
+	check(vz._cand == -1, "fuera de las flechas no hay candidata")
+	vz._board_input(_touch(0, false, Vector2(-400.0, -400.0)))
+	check(not vz.removed.has(fa) and Game.lives == lives_c, "soltar en vacío cancela")
 	check(vz._max_zoom() > 1.0, "los tableros grandes permiten zoom")
 	var c0: Vector2 = vz.board.size / 2.0
 	vz._board_input(_touch(0, true, c0 - Vector2(50, 0)))
@@ -140,10 +160,12 @@ func _run() -> void:
 	vz._board_input(_touch(1, false, c0 + Vector2(150, 0)))
 	vz._board_input(_touch(0, false, c0 - Vector2(50, 0)))
 	var pan_before: Vector2 = vz._pan
+	var removed_before: int = vz.removed.size()
 	vz._board_input(_touch(0, true, c0))
 	vz._board_input(_drag(0, c0 + Vector2(60, 40)))
+	check(vz._cand == -1, "al desplazar con zoom no hay candidata")
 	vz._board_input(_touch(0, false, c0 + Vector2(60, 40)))
-	check(vz._pan != pan_before, "arrastrar con zoom mueve el tablero")
+	check(vz._pan != pan_before and vz.removed.size() == removed_before, "arrastrar con zoom mueve el tablero sin activar nada")
 	check(vz._fit_btn.visible, "aparece el botón de ver todo")
 	vz._fit_btn.pressed.emit()
 	check(vz._zoom == 1.0 and vz._pan == Vector2.ZERO, "ver todo restablece el zoom")
@@ -278,3 +300,30 @@ func _run() -> void:
 	await get_tree().create_timer(0.8).timeout
 	v4.queue_free()
 	await _frames(1)
+
+	# Ligas: avatares y nombres únicos y coherentes; texturas disponibles.
+	var LG = preload("res://game/leagues.gd")
+	var Style = preload("res://ui/style.gd")
+	for t in LG.TYPES:
+		for k in 6:
+			var ids: Array = LG.identities("%s:%d" % [t, k], int(LG.CONFIG[t].size) - 1)
+			var av := {}
+			var kin := {}
+			var nm := {}
+			for e in ids:
+				av[e.avatar] = true
+				kin[LG.AVATAR_KIN[e.avatar]] = true
+				nm[e.name] = true
+				if LG.AVATAR_KIND[e.avatar] == "f":
+					check(not LG.NAMES_M.has(e.name), "avatar femenino sin nombre masculino")
+				if LG.AVATAR_KIND[e.avatar] == "m":
+					check(not LG.NAMES_F.has(e.name), "avatar masculino sin nombre femenino")
+			check(av.size() == ids.size() and nm.size() == ids.size(), "avatares y nombres únicos en %s" % t)
+			check(kin.size() == ids.size(), "sin avatares gemelos en %s" % t)
+	check(LG.AVATAR_KIND.length() == LG.AVATAR_COUNT and LG.AVATAR_KIN.size() == LG.AVATAR_COUNT, "metadatos de avatares")
+	for i in LG.AVATAR_COUNT:
+		check(Style.avatar(i) != null, "avatar %d carga" % i)
+	for t in LG.TYPES:
+		check(Style.league_art(t) != null, "imagen de liga " + t)
+	for n in ["trophy", "laurel", "chest", "flag", "popper", "arch", "banner", "stars", "rise", "progress"]:
+		check(Style.reward_art(n) != null, "premio " + n)

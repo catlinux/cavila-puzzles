@@ -122,14 +122,13 @@ func _row(rank: int, r: Dictionary, total: int) -> Control:
 			if promo:
 				col = Color8(16, 185, 129) if rank <= Leagues.PROMOTE else Style.RED
 			Style.text_at(c, Vector2(42, cy), str(rank), 28, col)
-		# Avatar con inicial.
-		c.draw_circle(Vector2(112, cy), 30, r.color)
-		var initial: String = "★" if r.you else String(r.name).substr(0, 1).to_upper()
+		# Avatar.
 		if r.you:
+			c.draw_circle(Vector2(112, cy), 30, Style.INK)
 			var ic := Style.icon("user-fill", Color.WHITE, 32)
 			c.draw_texture(ic, Vector2(112, cy) - ic.get_size() / 2.0)
 		else:
-			Style.text_at(c, Vector2(112, cy), initial, 30, Color.WHITE)
+			c.draw_texture_rect(Style.avatar(int(r.avatar)), Rect2(Vector2(112, cy) - Vector2(32, 32), Vector2(64, 64)), false)
 		c.draw_string(Style.font("display" if r.you else "body"), Vector2(164, cy + 12), r.name,
 			HORIZONTAL_ALIGNMENT_LEFT, c.size.x - 360, 32, Style.INK)
 		var pts := Style.fmt_int(r.points)
@@ -149,8 +148,7 @@ func _draw_info() -> void:
 	var m := (left % 3600) / 60
 	var s := left % 60
 	var time_txt := ("%dd %dh" % [h / 24, h % 24]) if h >= 24 else ("%d:%02d:%02d" % [h, m, s])
-	var tex := Style.icon("trophy-fill", Color.WHITE, 64)
-	c.draw_texture(tex, Vector2(r.position.x + 34, r.position.y + 34))
+	c.draw_texture_rect(Style.league_art(type), Rect2(r.position + Vector2(24, 20), Vector2(88, 88)), false)
 	c.draw_string(Style.font("display_bold"), Vector2(r.position.x + 120, r.position.y + 70),
 		tr("LEAGUE_OF") % tr("LEAGUE_" + type.to_upper()), HORIZONTAL_ALIGNMENT_LEFT, -1, 44, Color.WHITE)
 	c.draw_string(Style.font("body_bold"), Vector2(r.position.x + 120, r.position.y + 108),

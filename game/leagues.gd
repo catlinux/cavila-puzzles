@@ -20,16 +20,26 @@ const CONFIG := {
 const DIVISIONS := ["DIV_BRONZE", "DIV_SILVER", "DIV_GOLD", "DIV_PLATINUM", "DIV_DIAMOND"]
 const PROMOTE := 5  # en la semanal suben los 5 primeros y bajan los 5 últimos
 
-const NAMES := ["Lucía M.", "marc_puig", "Aitana", "JaviG", "NoraLuna", "pau13", "Carmen R.", "Iker",
-	"sofia88", "Jordi B.", "Valen", "Mireia", "Hugo_V", "martina.v", "LeoZ", "Ainhoa", "Oriol",
-	"Daniela", "Álex P.", "Nil", "emma_c", "Bruno", "Laia", "Mateo", "Clàudia", "raul92", "Irene",
-	"Gael", "Noa", "Pol R.", "sara_lm", "Adrián", "Júlia", "Biel", "Lola", "Arnau", "Paula G.",
-	"Unai", "Vega", "Hèctor", "Elena", "quim_s", "Marina", "Thiago", "Abril", "Rubén", "Nerea",
-	"Ferran", "Olivia", "dani_k", "Candela", "Marcos", "Jana", "Izan", "Berta", "Cristina", "Tomás",
-	"Ona", "Eric", "Lucas", "Carla", "Miguel A.", "Mar", "Enzo", "Alba S.", "Joel", "Rocío",
-	"Sergi", "Inés", "Teo", "Aina", "Gonzalo", "Lía", "Xavi", "Celia"]
-const AVATAR_COLORS := [Color8(255, 106, 85), Color8(59, 130, 246), Color8(16, 185, 129), Color8(245, 158, 11),
-	Color8(139, 92, 246), Color8(236, 72, 153), Color8(6, 182, 212), Color8(132, 204, 22)]
+## Avatares (assets/avatars/av_NN.png). Tipo: n = animal/robot, f = persona de aspecto femenino,
+## m = persona de aspecto masculino. Dos avatares con el mismo "kin" son casi gemelos (misma
+## plantilla): nunca coinciden en una misma liga.
+const AVATAR_KIND := "nnnnnnnnnnnnnnnnnnnnnfffffffmmmmmmmm"
+const AVATAR_KIN := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 22, 25, 23, 26, 27, 28, 29, 30, 31, 32, 33]
+const AVATAR_COUNT := 36
+
+const NAMES_F := ["Lucía M.", "Aitana", "Carmen R.", "sofia88", "Mireia", "martina.v", "Ainhoa", "Daniela",
+	"emma_c", "Laia", "Clàudia", "Irene", "Júlia", "sara_lm", "Lola", "Paula G.", "Vega", "Elena", "Marina",
+	"Abril", "Nerea", "Olivia", "Candela", "Jana", "Berta", "Cristina", "Ona", "Carla", "Mar", "Alba S.",
+	"Rocío", "Inés", "Aina", "Lía", "Noa", "Celia", "Valeria", "Anna P.", "Gemma", "Maite", "Sílvia", "Núria",
+	"Paloma", "Rosa M."]
+const NAMES_M := ["marc_puig", "JaviG", "Iker", "pau13", "Jordi B.", "Hugo_V", "LeoZ", "Oriol", "Álex P.", "Nil",
+	"Bruno", "Mateo", "raul92", "Gael", "Pol R.", "Adrián", "Biel", "Arnau", "Unai", "Hèctor", "quim_s", "Thiago",
+	"Rubén", "Ferran", "dani_k", "Marcos", "Izan", "Tomás", "Eric", "Lucas", "Miguel A.", "Enzo", "Joel", "Sergi",
+	"Teo", "Gonzalo", "Xavi", "Andreu", "Roger", "Víctor", "Dídac", "Samuel", "Pere", "Jaume"]
+## Apodos para quien usa un avatar de animal (también hay quien usa su nombre real).
+const NAMES_N := ["LunaFox", "zenpanda", "n0va", "KoalaKid", "Bruma", "pixel_owl", "Tito99", "Mochi", "Cometa",
+	"Nube", "TigreRoig", "ElOso", "sloth_mode", "PinguiX", "Kiwi", "Churro", "Pistacho", "Ondas", "Brisa", "Zorro_",
+	"Tortuga77", "MarAzul", "Bambú", "Cacao", "Trufa", "Valen", "NoraLuna", "Sombra", "Chispa7", "Menta"]
 
 
 ## Liga en curso de un tipo: {key, type, start, end} (tiempos unix). `bias_min` = zona horaria.
@@ -56,11 +66,44 @@ static func points_per_level(level: int) -> float:
 	return float(Levels.score(arrows, t, rival * 0.85, 2, 40, rival))
 
 
+## Identidades (avatar + nombre) de los participantes simulados de una liga. Deterministas por
+## la clave de la liga, con avatares y nombres todos distintos y coherentes entre sí.
+static func identities(key: String, count: int) -> Array:
+	var rng := Rng.make(Rng.hash_string("liga-id:" + key))
+	var order: Array = Rng.shuffle(range(AVATAR_COUNT), rng)
+	var used_kin := {}
+	var picks := []
+	for a in order:
+		if picks.size() >= count:
+			break
+		if used_kin.has(AVATAR_KIN[a]):
+			continue
+		used_kin[AVATAR_KIN[a]] = true
+		picks.append(a)
+	for a in order:  # solo si faltaran avatares con kin distinto
+		if picks.size() >= count:
+			break
+		if not picks.has(a):
+			picks.append(a)
+	var pools := {"f": Rng.shuffle(NAMES_F.duplicate(), rng), "m": Rng.shuffle(NAMES_M.duplicate(), rng),
+		"n": Rng.shuffle(NAMES_N.duplicate(), rng)}
+	var out := []
+	for a in picks:
+		var kind: String = AVATAR_KIND[a]
+		var pool_key := kind
+		if kind == "n" and rng.randf() < 0.45:
+			pool_key = "f" if rng.randf() < 0.5 else "m"  # animal con nombre real
+		if pools[pool_key].is_empty():
+			pool_key = "n" if not pools["n"].is_empty() else ("f" if not pools["f"].is_empty() else "m")
+		out.append({"avatar": a, "name": pools[pool_key].pop_back()})
+	return out
+
+
 ## Participantes simulados de una liga (sin contar al jugador).
 static func bots(inst: Dictionary, calib: float, division: int = 0) -> Array:
 	var cfg: Dictionary = CONFIG[inst.type]
 	var rng := Rng.make(Rng.hash_string("liga:" + inst.key))
-	var names: Array = Rng.shuffle(NAMES.duplicate(), rng)
+	var ids := identities(inst.key, int(cfg.size) - 1)
 	var out := []
 	var dur := float(inst.end - inst.start)
 	for k in int(cfg.size) - 1:
@@ -73,7 +116,7 @@ static func bots(inst: Dictionary, calib: float, division: int = 0) -> Array:
 				var len_s := rng.randf_range(6.0, 35.0) * 60.0
 				var at := rng.randf_range(0.0, maxf(dur - len_s, 1.0))
 				sessions.append([at, len_s])
-		out.append({"name": names[k % names.size()], "color": AVATAR_COLORS[k % AVATAR_COLORS.size()],
+		out.append({"name": ids[k].name, "avatar": ids[k].avatar,
 			"rate": calib * lvl_per_hour * skill / 3600.0, "sessions": sessions})
 	return out
 
@@ -87,12 +130,12 @@ static func bot_points(bot: Dictionary, inst: Dictionary, now: int) -> int:
 	return int(total)
 
 
-## Clasificación: [{name, points, color, you}] ordenada de mayor a menor.
+## Clasificación: [{name, points, avatar (-1 = tú), you}] ordenada de mayor a menor.
 static func standings(inst: Dictionary, calib: float, division: int, your_points: int, now: int, your_name := "") -> Array:
 	var rows := []
 	for b in bots(inst, calib, division):
-		rows.append({"name": b.name, "points": bot_points(b, inst, mini(now, inst.end)), "color": b.color, "you": false})
-	rows.append({"name": your_name, "points": your_points, "color": Color8(29, 40, 66), "you": true})
+		rows.append({"name": b.name, "points": bot_points(b, inst, mini(now, inst.end)), "avatar": b.avatar, "you": false})
+	rows.append({"name": your_name, "points": your_points, "avatar": -1, "you": true})
 	rows.sort_custom(func(a, b): return a.points > b.points or (a.points == b.points and a.you))
 	return rows
 

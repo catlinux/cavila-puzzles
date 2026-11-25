@@ -30,6 +30,7 @@ const FONT_FILES := {
 }
 
 static var _fonts := {}
+static var _art := {}
 static var _icons := {}
 
 
@@ -37,6 +38,25 @@ static func font(kind: String) -> Font:
 	if not _fonts.has(kind):
 		_fonts[kind] = load(FONT_FILES[kind])
 	return _fonts[kind]
+
+
+## Imagen del proyecto (avatares, ligas, premios), con caché.
+static func art(path: String) -> Texture2D:
+	if not _art.has(path):
+		_art[path] = load(path)
+	return _art[path]
+
+
+static func avatar(i: int) -> Texture2D:
+	return art("res://assets/avatars/av_%02d.png" % i)
+
+
+static func league_art(type: String) -> Texture2D:
+	return art("res://assets/league/%s.png" % type)
+
+
+static func reward_art(name: String) -> Texture2D:
+	return art("res://assets/rewards/%s.png" % name)
 
 
 ## Icono Phosphor rasterizado al tamaño y color pedidos (con caché).

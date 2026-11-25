@@ -256,8 +256,7 @@ func _draw_league_card(c: Control, t: String) -> void:
 	Style.soft_shadow(c, r, 34.0, Color(cols[0], 0.35), 12.0, Vector2(0, 8))
 	Style.gradient_shape(c, r, 34.0, cols[0], cols[1])
 	var lg := Progress.league(t)
-	var icon_name: String = {"flash": "lightning-fill", "daily": "calendar-check-fill", "weekly": "medal-fill"}[t]
-	c.draw_texture(Style.icon(icon_name, Color.WHITE, 40), r.position + Vector2(20, 18))
+	c.draw_texture_rect(Style.league_art(t), Rect2(Vector2(r.end.x - 72, r.position.y + 10), Vector2(62, 62)), false)
 	var name: String = tr("LEAGUE_" + t.to_upper())
 	if t == "weekly":
 		name = tr(Leagues.DIVISIONS[int(Progress.data.division)])

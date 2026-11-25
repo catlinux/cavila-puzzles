@@ -16,6 +16,8 @@ var removed := {}
 var finished := false
 var won := false
 var hint_arrow := -1
+## Flecha que se activará al soltar el dedo (se ilumina mientras se mantiene pulsado).
+var _cand := -1
 
 var _occ := PackedInt32Array()
 var _anims := {}       # flecha -> animación en curso (salida o choque)
@@ -388,7 +390,7 @@ func _process(delta: float) -> void:
 	if hint_arrow >= 0 and _clock > _hint_until:
 		hint_arrow = -1
 	# La capa fija solo se redibuja cuando cambia qué piezas se mueven (o durante una sacudida).
-	var dyn := "%s|%s|%d" % [_anims.keys(), _flash.keys(), hint_arrow]
+	var dyn := "%s|%s|%d|%d" % [_anims.keys(), _flash.keys(), hint_arrow, _cand]
 	if dyn != _dyn_key or _shake > 0.0:
 		_dyn_key = dyn
 		board.queue_redraw()
@@ -408,17 +410,18 @@ func _board_input(ev: InputEvent) -> void:
 				_press_pos = ev.position
 				_pan0 = _pan
 				_moved = false
+				_set_cand(arrow_at(ev.position))
 			elif _touches.size() == 2:
 				var pts: Array = _touches.values()
 				_pinch_d0 = maxf(pts[0].distance_to(pts[1]), 1.0)
 				_zoom0 = _zoom
 				_last_mid = (pts[0] + pts[1]) / 2.0
 				_moved = true
+				_set_cand(-1)
 		else:
 			_touches.erase(ev.index)
 			if _touches.is_empty():
-				if not _moved:
-					_tap(ev.position)
+				_release()
 			elif _touches.size() == 1:
 				_press_pos = _touches.values()[0]
 				_pan0 = _pan
@@ -440,8 +443,9 @@ func _board_input(ev: InputEvent) -> void:
 				_press_pos = ev.position
 				_pan0 = _pan
 				_moved = false
-			elif not _moved:
-				_tap(ev.position)
+				_set_cand(arrow_at(ev.position))
+			else:
+				_release()
 		elif ev.pressed and ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
 			_zoom_at(_zoom * (1.15 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.15), ev.position)
 	elif ev is InputEventMouseMotion and _mouse_down and ev.device != InputEvent.DEVICE_ID_EMULATION:
@@ -450,22 +454,32 @@ func _board_input(ev: InputEvent) -> void:
 		_zoom_at(_zoom * ev.factor, ev.position)
 
 
-func _tap(pos: Vector2) -> void:
-	var i := arrow_at(pos)
-	if i >= 0:
+func _set_cand(i: int) -> void:
+	if i != _cand:
+		_cand = i
+		board.queue_redraw()
+
+
+## Al soltar: se activa la flecha iluminada (si la hay y no se ha arrastrado el tablero).
+func _release() -> void:
+	var i := _cand
+	var panned := _moved
+	_set_cand(-1)
+	if i >= 0 and not panned:
 		tap_arrow(i)
 
 
+## Arrastre de un dedo: con zoom desplaza el tablero (pasados unos píxeles); sin zoom, o
+## mientras no se supere ese umbral, el resaltado sigue al dedo para poder corregir la elección.
 func _drag_to(pos: Vector2) -> void:
 	var dist := pos.distance_to(_press_pos)
-	if _zoom > 1.01:
-		if dist > 14.0:
-			_moved = true
-		if _moved:
-			_pan = _pan0 + (pos - _press_pos)
-			_clamp_pan()
-	elif dist > 40.0:
-		_moved = true  # un arrastre largo sin zoom no cuenta como toque
+	if _zoom > 1.01 and (_moved or dist > 14.0):
+		_moved = true
+		_pan = _pan0 + (pos - _press_pos)
+		_clamp_pan()
+		_set_cand(-1)
+	else:
+		_set_cand(arrow_at(pos))
 
 
 func _base_cell() -> float:
@@ -502,8 +516,8 @@ func _clamp_pan() -> void:
 
 
 ## Radio del dedo (px de pantalla de diseño) y margen para preferir una flecha libre.
-const FINGER_PX := 34.0
-const FAIR_PX := 14.0
+const FINGER_PX := 46.0
+const FAIR_PX := 22.0
 
 
 ## Flecha bajo el punto (coordenadas del tablero), con tolerancia para dedos:
@@ -515,8 +529,8 @@ const FAIR_PX := 14.0
 func arrow_at(pos: Vector2) -> int:
 	_layout()
 	var q := (pos - _origin) / _cell - Vector2(0.5, 0.5)  # en casillas, centros enteros
-	var radius := clampf(FINGER_PX / _cell, 0.5, 1.2)
-	var slack := clampf(FAIR_PX / _cell, 0.2, 0.45)
+	var radius := clampf(FINGER_PX / _cell, 0.7, 1.5)
+	var slack := clampf(FAIR_PX / _cell, 0.3, 0.6)
 	var cands := []
 	for i in puzzle.arrows.size():
 		if removed.has(i):
@@ -598,7 +612,7 @@ func _offset(i: int) -> float:
 
 
 func _is_dynamic(i: int) -> bool:
-	return _anims.has(i) or _flash.has(i) or i == hint_arrow
+	return _anims.has(i) or _flash.has(i) or i == hint_arrow or i == _cand
 
 
 ## Capa fija: forma del tablero, puntos, rocas y piezas quietas.
@@ -658,6 +672,10 @@ func _draw_arrow(c: CanvasItem, i: int) -> void:
 		var pulse := 0.5 + 0.5 * sin(_clock * 6.0)
 		col = Style.GOLD
 		_stroke(c, pts, Color(Style.GOLD, (0.18 + 0.12 * pulse) * alpha), minf(wdt * (2.6 + 0.6 * pulse), _cell * 0.55))
+	if i == _cand and not _anims.has(i):
+		# Elegida con el dedo: halo y color del mundo (no revela si está bloqueada).
+		col = col.lerp(world.a, 0.75)
+		_stroke(c, pts, Color(world.a, 0.28 * alpha), minf(wdt * 3.6, _cell * 0.8))
 	if _flash.has(i):
 		col = col.lerp(Style.RED, clampf(_flash[i] / 0.5, 0.0, 1.0))
 	if _anims.has(i) and _anims[i].kind == "exit":
@@ -885,9 +903,25 @@ func _show_result(is_win: bool, stars: int, bonus: int) -> void:
 	vb.add_theme_constant_override("separation", 16)
 	panel.add_child(vb)
 
+	if is_win:
+		var rw := "flag"
+		if Game.mode == "daily":
+			rw = "banner"
+		elif _record:
+			rw = "popper"
+		elif bonus > 0:
+			rw = "chest"
+		elif stars >= 3:
+			rw = "trophy"
+		var rt := TextureRect.new()
+		rt.texture = Style.reward_art(rw)
+		rt.custom_minimum_size = Vector2(0, 150)
+		rt.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		rt.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		vb.add_child(rt)
 	var born := _clock
 	var stars_ctl := Control.new()
-	stars_ctl.custom_minimum_size = Vector2(0, 160)
+	stars_ctl.custom_minimum_size = Vector2(0, 120 if is_win else 160)
 	stars_ctl.draw.connect(func(): _draw_result_stars(stars_ctl, is_win, stars, _clock - born))
 	vb.add_child(stars_ctl)
 	vb.add_child(Style.label(tr("WIN") if is_win else tr("LOSE"), 62, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
