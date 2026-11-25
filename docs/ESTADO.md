@@ -21,7 +21,7 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 - Zoom y desplazamiento con pellizco; música ambiente con deslizadores; sonidos zen; vibración suave.
 - Esquinas de flecha redondeadas (`CORNER_RADIUS` 0.2 en `ui/play.gd`).
 - Fondo del tablero con margen amplio (0,62 casillas) y esquinas grandes: contorno suave, flechas del borde claramente dentro. Puntos del fondo más marcados (`DOT_COL`).
-- **Los huecos solo dan forma.** Una flecha cruza los huecos como espacio vacío y solo sale por el borde exterior de la cuadrícula; la bloquea cualquier flecha o roca en su línea (`Arrows.exit_path`, generador y solucionador usan la misma definición). Se descartó la regla «un hueco = ya ha salido» (confundía: la pista marcaba libre una flecha que parecía tapada) y los canales grises. Sombra del tablero opaca (`SHADOW_FLAT`) para que no queden rayas en el borde. Velocidad de salida: `EXIT_V0`, `EXIT_ACC`, `EXIT_VMAX` en `ui/play.gd`.
+- **Los huecos solo dan forma.** Una flecha cruza los huecos como espacio vacío y solo sale por el borde exterior de la cuadrícula; la bloquea cualquier flecha o roca en su línea (`Arrows.exit_path`, generador y solucionador usan la misma definición). Se descartó la regla «un hueco = ya ha salido» (confundía: la pista marcaba libre una flecha que parecía tapada) y los canales grises. Sombra del tablero opaca (`SHADOW_FLAT`) para que no queden rayas en el borde. Velocidad de salida (casillas/s, arranca lenta y sube): `EXIT_V0` 5, `EXIT_ACC` 48, `EXIT_VMAX` 30 en `ui/play.gd` (original: 7 y 75 sin tope; probada demasiado lenta: 4, 26, 16).
 
 ## Entrada táctil (ui/play.gd)
 Pulsar resalta la flecha candidata y soltar la activa. El radio de toque (~46 px) se adapta a la casilla y

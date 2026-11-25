@@ -512,9 +512,9 @@ func _clamp_pan() -> void:
 ## Radio del dedo (px de pantalla de diseño) y margen para preferir una flecha libre.
 const DOT_COL := Color8(196, 204, 221)  # puntos del fondo, más marcados que Style.DOT
 # Salida de una flecha (casillas/s): arranca despacio, acelera con suavidad y no pasa de un tope.
-const EXIT_V0 := 4.0
-const EXIT_ACC := 26.0
-const EXIT_VMAX := 16.0
+const EXIT_V0 := 5.0
+const EXIT_ACC := 48.0
+const EXIT_VMAX := 30.0
 const SHADOW_FLAT := Color8(234, 237, 245)  # sombra del tablero opaca: al solaparse no deja rayas
 const FINGER_PX := 46.0
 const FAIR_PX := 22.0
