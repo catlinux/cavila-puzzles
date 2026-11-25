@@ -28,7 +28,7 @@ el porcentaje de aciertos (la simulación se colgaba): validar a mano en el móv
   (`AVATAR_KIND`: n animal, f femenino, m masculino) y `AVATAR_KIN` (familia de plantilla): en una liga no hay
   avatares, familias ni nombres repetidos y el nombre encaja con el avatar.
 - Imágenes de liga en `assets/league/`; premios en `assets/rewards/` (se muestra uno en la pantalla de victoria).
-- **Antes de publicar:** indicar en la interfaz que los rivales son simulados, o sustituirlos por reales (servidor).
+- Aviso «rivales simulados» ya visible en la pantalla de ligas; si se pasa a rivales reales, quitarlo.
 
 ### Pendiente: hacer las ligas más creíbles (propuesta, sin implementar)
 1. Curvas de actividad por hora del día (más gente por la tarde y noche).
@@ -37,7 +37,7 @@ el porcentaje de aciertos (la simulación se colgaba): validar a mano en el móv
 4. Rivales que reaparecen entre ligas, con historia.
 5. Avisos en vivo: "X te ha adelantado", "a 300 puntos del puesto 3".
 6. Rivales más fuertes en divisiones altas.
-7. Marca visible de "simulado".
+7. ~~Marca visible de "simulado".~~ Hecho: nota «Los rivales son simulados» bajo la lista (`SIM_NOTE`, sin probar en Godot).
 
 ## Imágenes aportadas sin usar todavía
 - `assets/rewards/`: arch (mundo completado), laurel (dificultad súper/extra), rise (ascenso de división), stars, progress.

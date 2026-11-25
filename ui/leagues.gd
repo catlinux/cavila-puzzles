@@ -61,6 +61,9 @@ func _ready() -> void:
 	var card := Style.card(44, 18)
 	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(card)
+	var note := Style.label(tr("SIM_NOTE"), 24, Style.SUB, "body")
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(note)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	card.add_child(scroll)

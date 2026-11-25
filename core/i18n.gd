@@ -74,6 +74,7 @@ const STRINGS := {
 	"LEAGUE_DAILY": ["Diaria", "Diària"],
 	"LEAGUE_WEEKLY": ["Semanal", "Setmanal"],
 	"LEAGUE_OF": ["Liga %s", "Lliga %s"],
+	"SIM_NOTE": ["Los rivales son simulados", "Els rivals són simulats"],
 	"ENDS_IN": ["Termina en %s", "Acaba en %s"],
 	"RANK_OF": ["Puesto %d de %d", "Posició %d de %d"],
 	"PRIZES": ["Premios: 1.º %d · 2.º %d · 3.º %d pistas", "Premis: 1r %d · 2n %d · 3r %d pistes"],
