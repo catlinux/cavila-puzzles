@@ -7,7 +7,7 @@ const Baked = preload("res://game/baked.gd")
 
 ## Huella de niveles NO horneados. Si cambia, los jugadores verían otros tableros en esos
 ## niveles: o es un cambio involuntario del generador, o hay que hornear más niveles antes.
-const FINGERPRINTS := {1001: 3420995411, 1010: 3423193214, 1501: 676297152, 1500: 1688884167, 3000: 638731422}
+const FINGERPRINTS := {1001: 2778478649, 1010: 3839074242, 1501: 2753486421, 1500: 1688884167, 3000: 638731422}
 
 
 func _init() -> void:

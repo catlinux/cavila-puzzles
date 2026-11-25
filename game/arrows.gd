@@ -55,6 +55,19 @@ static func exit_mask(w: int, h: int, holes: Array) -> PackedByteArray:
 	return m
 
 
+## ¿La casilla de hueco `c` es una salida PLANA para una flecha que avanza en `d`? Sí si las dos
+## casillas de sus lados (perpendiculares al avance) no son tablero (hueco o fuera de la cuadrícula).
+## Si no, la flecha entraría por un rincón (pegada a un saliente o a una pared) y no se vería
+## claro si sale o sigue dentro: el generador nunca apunta una flecha así.
+static func flat_exit(xm: PackedByteArray, w: int, h: int, c: Vector2i, d: Vector2i) -> bool:
+	var perp := Vector2i(-d.y, d.x)
+	for sgn in [1, -1]:
+		var n: Vector2i = c + perp * sgn
+		if n.x >= 0 and n.y >= 0 and n.x < w and n.y < h and xm[n.y * w + n.x] != 1:
+			return false
+	return true
+
+
 static func _xm(p: Dictionary) -> PackedByteArray:
 	if not p.has("_xm"):
 		p["_xm"] = exit_mask(p.w, p.h, p.get("holes", []))
@@ -299,7 +312,9 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 				var blocked := false
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 					if st.xm[c.y * w + c.x] == 1:
-						break  # exterior visible: ya ha salido
+						if not flat_exit(st.xm, w, h, c, d):
+							blocked = true  # saldría por un rincón
+						break  # exterior: ya ha salido
 					var o: int = st.occ[c.y * w + c.x]
 					if o == ROCK:
 						blocked = true
@@ -338,7 +353,7 @@ static func _dir_ok(st: Dictionary, hd: Vector2i, d: Vector2i) -> bool:
 	var c: Vector2i = hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 		if st.xm[c.y * w + c.x] == 1:
-			break
+			return flat_exit(st.xm, w, h, c, d)
 		var o: int = st.occ[c.y * w + c.x]
 		if o == ROCK:
 			return false
@@ -638,7 +653,9 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 					var k := c.y * w + c.x
 					if xm[k] == 1:
-						break  # exterior visible: ya ha salido
+						if not flat_exit(xm, w, h, c, d):
+							ok = false  # saldría por un rincón
+						break  # exterior: ya ha salido
 					if occ[k] != -1 or rock[k] == 1:
 						ok = false
 						break
@@ -670,6 +687,8 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 						while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 							var kk := c.y * w + c.x
 							if xm[kk] == 1:
+								if not flat_exit(xm, w, h, c, d):
+									ok = false
 								break
 							if occ[kk] != -1 or rock[kk] == 1:
 								ok = false

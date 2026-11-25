@@ -248,20 +248,26 @@ func _run() -> void:
 
 	# Determinismo con la precarga en segundo plano: lo que sale de Game es idéntico a generar el
 	# nivel en solitario, aunque se solapen la precarga y la generación del hilo principal.
+	# Se prueba con un nivel horneado (300) y con otro que se genera de verdad (1300).
 	var Lv = load("res://game/levels.gd")
-	var det_bad := 0
-	for rep in 12:
-		Game._cache.clear()
-		Game.prefetch(301)
-		var mine: Dictionary = Game.puzzle_for_level(300)  # se solapa con la precarga de 301
-		Game.begin("level", 300)  # reutiliza el hilo si sigue vivo
-		await _frames(1)
-		var solo300 = Game.generate_locked(Lv.seed_for(300), Lv.params_for(300))
-		var pre301: Dictionary = Game.puzzle_for_level(301)
-		var solo301 = Game.generate_locked(Lv.seed_for(301), Lv.params_for(301))
-		if var_to_str(mine.arrows) != var_to_str(solo300.arrows) or var_to_str(pre301.arrows) != var_to_str(solo301.arrows):
-			det_bad += 1
-	check(det_bad == 0, "los niveles son idénticos con y sin precarga solapada (%d de 12 distintos)" % det_bad)
+	for base in [300, 1300]:
+		var det_bad := 0
+		var det_info := ""
+		for rep in 12:
+			Game._cache.clear()
+			Game.prefetch(base + 1)
+			var mine: Dictionary = Game.puzzle_for_level(base)  # se solapa con la precarga del siguiente
+			Game.begin("level", base)  # reutiliza el hilo si sigue vivo
+			await _frames(1)
+			var solo0 = Game.generate_locked(Lv.seed_for(base), Lv.params_for(base))
+			var pre1: Dictionary = Game.puzzle_for_level(base + 1)
+			var solo1 = Game.generate_locked(Lv.seed_for(base + 1), Lv.params_for(base + 1))
+			var d0 := var_to_str(mine.arrows) != var_to_str(solo0.arrows)
+			var d1 := var_to_str(pre1.arrows) != var_to_str(solo1.arrows)
+			if d0 or d1:
+				det_bad += 1
+				det_info = "rep %d: nivel %d distinto=%s (%d vs %d flechas), nivel %d distinto=%s (%d vs %d)" % [rep, base, d0, mine.arrows.size(), solo0.arrows.size(), base + 1, d1, pre1.arrows.size(), solo1.arrows.size()]
+		check(det_bad == 0, "los niveles %d y %d son idénticos con y sin precarga solapada (%d de 12 distintos) %s" % [base, base + 1, det_bad, det_info])
 
 	# Choques: tocar flechas bloqueadas resta luces y al tercer choque se pierde.
 	var v2 = await _play("level", 300)

@@ -114,11 +114,17 @@ func run() -> void:
 		_arrow([Vector2i(1, 1), Vector2i(2, 1)]),
 		_arrow([Vector2i(6, 1), Vector2i(7, 1)])]}
 	check(Arrows.validate(notch).ok and Arrows.blocker(notch, 0, Arrows.occupancy(notch)).by == -1, "en la muesca, A sale sin chocar con B")
+	# Salida plana vs rincón: muesca de 3 columnas (3-5) abierta por arriba y un escalón al fondo.
+	var fm := Arrows.exit_mask(9, 5, notch_holes)
+	check(Arrows.flat_exit(fm, 9, 5, Vector2i(3, 3), Vector2i(1, 0)) == false, "entrar en la muesca pegado al suelo (fila 3, con tablero debajo) es un rincón")
+	check(Arrows.flat_exit(fm, 9, 5, Vector2i(3, 2), Vector2i(1, 0)) == true, "entrar en la muesca por una fila con huecos a los lados es plano")
+	check(Arrows.flat_exit(fm, 9, 5, Vector2i(3, 0), Vector2i(1, 0)) == true, "contra el borde de la cuadrícula también es plano")
 	# Propiedad sobre niveles reales con huecos: toda salida llega hasta el borde exterior
 	# y solo la bloquea lo que haya en su línea.
 	var wh_levels := 0
 	var wh_cross := 0
 	var wh_bad := 0
+	var wh_corner := 0
 	for lv in range(20, 260, 3):
 		var par3 := Levels.params_for(lv)
 		if par3.holes.is_empty():
@@ -130,6 +136,7 @@ func run() -> void:
 		var holes3 := {}
 		for c in g3.holes:
 			holes3[c] = true
+		var xm3 := Arrows.exit_mask(g3.w, g3.h, g3.holes)
 		var occ3 := Arrows.occupancy(g3)
 		for i in g3.arrows.size():
 			var a3: Dictionary = g3.arrows[i]
@@ -139,6 +146,8 @@ func run() -> void:
 			while Arrows.inside(g3, cc):
 				if holes3.has(cc):
 					crossed = true
+					if not Arrows.flat_exit(xm3, g3.w, g3.h, cc, a3.dir):
+						wh_corner += 1  # saldría por un rincón
 					break
 				raw.append(cc)
 				cc += a3.dir
@@ -154,6 +163,7 @@ func run() -> void:
 				wh_cross += 1
 		check(Arrows.solve(g3).solvable and Arrows.validate(g3).ok, "nivel %d con huecos: válido y resoluble" % lv)
 	check(wh_levels >= 20, "se han revisado niveles con huecos (%d)" % wh_levels)
+	check(wh_corner == 0, "ninguna flecha sale por un rincón: todas salen de frente contra un lado plano (%d en %d salidas a un hueco)" % [wh_corner, wh_cross])
 	check(wh_bad == 0, "la salida termina en el borde o en el primer hueco (%d fallos, %d salidas acaban en un hueco)" % [wh_bad, wh_cross])
 
 	# Formas: escalones anchos y planos. Ningún hueco es una muesca fina ni un agujero cerrado.
