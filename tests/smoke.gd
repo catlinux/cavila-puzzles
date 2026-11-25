@@ -208,8 +208,8 @@ func _run() -> void:
 	vt.queue_free()
 	await _frames(1)
 
-	# Salir por un hueco = salir del tablero: la flecha sale (sin perder luz) aunque más allá
-	# del hueco haya otras flechas, y desaparece enseguida.
+	# Los huecos se cruzan: una flecha cuya línea atraviesa un hueco y tiene otra flecha más allá
+	# está bloqueada (choca y pierde una luz); solo se sale por el borde exterior.
 	var found_lv := -1
 	var found_i := -1
 	var Levels = load("res://game/levels.gd")
@@ -229,7 +229,7 @@ func _run() -> void:
 			while Arrows.inside(pz, cc) and found_i == -1:
 				if hs.has(cc):
 					crossed = true
-				elif crossed and oc[cc.y * pz.w + cc.x] >= 0 and Arrows.can_exit(pz, i, oc):
+				elif crossed and oc[cc.y * pz.w + cc.x] >= 0 and not Arrows.can_exit(pz, i, oc):
 					found_lv = lv
 					found_i = i
 				cc += ar.dir
@@ -237,14 +237,11 @@ func _run() -> void:
 				break
 		if found_i != -1:
 			break
-	check(found_i != -1, "hay un nivel con una flecha que sale por un hueco con algo más allá")
+	check(found_i != -1, "hay un nivel con una flecha bloqueada por otra al otro lado de un hueco")
 	if found_i != -1:
 		var vh = await _play("level", found_lv)
 		var lives0: int = Game.lives
-		check(vh.tap_arrow(found_i) == "exit" and Game.lives == lives0, "la flecha que sale por un hueco sale sin chocar")
-		check(vh._exit_hole[found_i], "su animación es de salida por hueco")
-		await get_tree().create_timer(0.7).timeout
-		check(vh._gone.has(found_i), "desaparece enseguida tras salir del tablero")
+		check(vh.tap_arrow(found_i) == "bump" and Game.lives == lives0 - 1, "la flecha choca con lo que hay tras el hueco")
 		vh.queue_free()
 		await _frames(1)
 

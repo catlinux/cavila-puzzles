@@ -44,28 +44,14 @@ static func occupancy(p: Dictionary, removed: Dictionary = {}) -> PackedInt32Arr
 	return occ
 
 
-## Máscara de huecos (1 = hueco), cacheada en el propio puzle.
-static func _hole_mask(p: Dictionary) -> PackedByteArray:
-	if not p.has("_hm"):
-		var m := PackedByteArray()
-		m.resize(p.w * p.h)
-		for c in p.get("holes", []):
-			m[c.y * p.w + c.x] = 1
-		p["_hm"] = m
-	return p["_hm"]
-
-
-## Casillas por las que pasa la cabeza al salir. Termina en el borde del tablero o en el
-## primer hueco: un hueco está FUERA del tablero, así que la flecha que llega a él ya ha
-## salido y no puede volver a entrar ni chocar con nada que haya más allá.
+## Casillas por las que pasa la cabeza al salir, hasta el borde exterior de la cuadrícula.
+## Los huecos son solo forma del tablero: se cruzan como espacio vacío, y lo que haya al otro
+## lado (flechas, rocas) sigue bloqueando. Solo se sale por el borde exterior.
 static func exit_path(p: Dictionary, i: int) -> Array:
 	var a: Dictionary = p.arrows[i]
-	var hm := _hole_mask(p)
 	var out := []
 	var c: Vector2i = head(a) + a.dir
 	while inside(p, c):
-		if hm[c.y * p.w + c.x] == 1:
-			break
 		out.append(c)
 		c += a.dir
 	return out
@@ -293,8 +279,6 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 				var blocked := false
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 					var o: int = st.occ[c.y * w + c.x]
-					if o == HOLE:
-						break  # fuera del tablero: ya ha salido
 					if o == ROCK:
 						blocked = true
 						break
@@ -332,8 +316,6 @@ static func _dir_ok(st: Dictionary, hd: Vector2i, d: Vector2i) -> bool:
 	var c: Vector2i = hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 		var o: int = st.occ[c.y * w + c.x]
-		if o == HOLE:
-			break
 		if o == ROCK:
 			return false
 		c += d
@@ -360,8 +342,6 @@ static func _ray_cells(st: Dictionary, hd: Vector2i, d: Vector2i) -> Array:
 	var out := []
 	var c := hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < st.h:
-		if st.occ[c.y * w + c.x] == HOLE:
-			break
 		out.append(c.y * w + c.x)
 		c += d
 	return out
@@ -446,8 +426,6 @@ static func _grow(rng: RandomNumberGenerator, st: Dictionary, hd: Vector2i, d: V
 	var ray := {}
 	var c := hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
-		if st.occ[c.y * w + c.x] == HOLE:
-			break
 		ray[c] = true
 		c += d
 	var b := hd - d
@@ -595,10 +573,6 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 		blocked[c.y * w + c.x] = 1
 	var rock := PackedByteArray()
 	rock.resize(w * h)
-	var hole := PackedByteArray()
-	hole.resize(w * h)
-	for c in p.holes:
-		hole[c.y * w + c.x] = 1
 	for c in p.rocks:
 		blocked[c.y * w + c.x] = 1
 		rock[c.y * w + c.x] = 1
@@ -634,8 +608,6 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 				var deps := {}
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 					var k := c.y * w + c.x
-					if hole[k] == 1:
-						break  # fuera del tablero: ya ha salido
 					if occ[k] != -1 or rock[k] == 1:
 						ok = false
 						break
@@ -666,8 +638,6 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 						var ok := true
 						while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 							var kk := c.y * w + c.x
-							if hole[kk] == 1:
-								break
 							if occ[kk] != -1 or rock[kk] == 1:
 								ok = false
 								break

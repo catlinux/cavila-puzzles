@@ -10,7 +10,7 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 
 ## Niveles fijos
 - Niveles 1-1000 **horneados** en `game/levels_baked.bin` (0,9 MB, zstd): `Game.make_level` los lee de ahí, así que son iguales para todos y no cambian aunque se toque el generador. Formato y codificación en `game/baked.gd`. Incluido en el APK vía `include_filter` de `export_presets.cfg`.
-- Del 1001 en adelante se generan por semilla (deterministas: mismo tablero en todos los móviles). `tests/test_baked.gd` guarda la huella de los niveles 1001, 1500 y 3000: si falla, el generador ha cambiado y esos niveles cambiarían para los jugadores (o es intencionado y hay que hornear más antes).
+- Al cambiar la regla de huecos se volvieron a hornear los 1000 niveles (cambian respecto a versiones anteriores del APK). Del 1001 en adelante se generan por semilla (deterministas: mismo tablero en todos los móviles). `tests/test_baked.gd` guarda la huella de los niveles 1001, 1500 y 3000: si falla, el generador ha cambiado y esos niveles cambiarían para los jugadores (o es intencionado y hay que hornear más antes).
 - Regenerar / ampliar: `tools/bake_levels.gd` (`COUNT`). En paralelo: 4 procesos con `-- desde hasta trozo.bin` y luego `-- --merge trozos...` (~1 min en total). **Ojo:** volver a hornear con un generador distinto cambia niveles que la gente ya ha jugado.
 
 ## Reglas ya implementadas
@@ -21,7 +21,7 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 - Zoom y desplazamiento con pellizco; música ambiente con deslizadores; sonidos zen; vibración suave.
 - Esquinas de flecha redondeadas (`CORNER_RADIUS` 0.2 en `ui/play.gd`).
 - Fondo del tablero con margen amplio (0,62 casillas) y esquinas grandes: contorno suave, flechas del borde claramente dentro. Puntos del fondo más marcados (`DOT_COL`).
-- **Huecos = exterior.** Una flecha con un hueco justo delante ya ha salido, aunque más allá haya otra flecha (regla de `Arrows.exit_path`). Para que se vea, cada hueco de salida (hasta 3 casillas) se pinta como un canal gris de una casilla centrado en la línea de la flecha (`_corridor`, en `_draw_shape`). Si tras el hueco vuelve a haber tablero (`_exit_enclosed`) la flecha se desvanece en 1,5 casillas y no sobrevuela lo de detrás. Antes se pintaba de blanco y la pista parecía errónea. La animación de salida es la original.
+- **Los huecos solo dan forma.** Una flecha cruza los huecos como espacio vacío y solo sale por el borde exterior de la cuadrícula; la bloquea cualquier flecha o roca en su línea (`Arrows.exit_path`, generador y solucionador usan la misma definición). Se descartó la regla «un hueco = ya ha salido» (confundía: la pista marcaba libre una flecha que parecía tapada) y los canales grises. Sombra del tablero opaca (`SHADOW_FLAT`) para que no queden rayas en el borde. Velocidad de salida: `EXIT_V0`, `EXIT_ACC`, `EXIT_VMAX` en `ui/play.gd`.
 
 ## Entrada táctil (ui/play.gd)
 Pulsar resalta la flecha candidata y soltar la activa. El radio de toque (~46 px) se adapta a la casilla y

@@ -26,8 +26,6 @@ var _flash := {}       # flecha -> segundos de destello coral
 var _tracks: Array = []  # recorrido de cada flecha en coordenadas de casilla
 var _boxes: Array = []   # rectángulo que ocupa cada flecha (para descartar rápido al tocar)
 var _exit_len: Array = []
-var _exit_enclosed: Array = []  # true si tras el hueco de salida vuelve a haber tablero
-var _exit_hole: Array = []  # true si la salida termina en un hueco (no en el borde del tablero)
 var _particles: Array = []
 var _hint_until := 0.0
 var _shake := 0.0
@@ -54,7 +52,6 @@ var _zoom0 := 1.0
 var _last_mid := Vector2.ZERO
 var _fit_btn: Control
 var _holes := {}
-var _corridor := {}  # huecos por los que salen las flechas: se pintan como tablero
 var _fx: Control  # capa de piezas en movimiento, destellos y partículas
 var _dyn_key := ""
 var piece_style := "arrows"
@@ -220,8 +217,6 @@ func _prepare() -> void:
 	_occ = Arrows.occupancy(puzzle)
 	_tracks.clear()
 	_exit_len.clear()
-	_exit_hole.clear()
-	_exit_enclosed.clear()
 	_boxes.clear()
 	for i in puzzle.arrows.size():
 		var a: Dictionary = puzzle.arrows[i]
@@ -238,21 +233,11 @@ func _prepare() -> void:
 			tr_pts.append(hd + Vector2(a.dir) * k)
 		_tracks.append(tr_pts)
 		_exit_len.append(r)
-		# La salida termina en un hueco si la casilla siguiente a su último tramo sigue dentro de la
-		# cuadrícula (si no, ha llegado al borde del tablero).
-		_exit_hole.append(Arrows.inside(puzzle, Arrows.head(a) + a.dir * (r + 1)))
-		var q: Vector2i = Arrows.head(a) + a.dir * (r + 1)
-		while Arrows.inside(puzzle, q) and _holes.has(q):
-			q += a.dir
-		_exit_enclosed.append(_exit_hole[_exit_hole.size() - 1] and Arrows.inside(puzzle, q))
 
 
-## Cuánto se tarda en desvanecerse una flecha que sale (en casillas de recorrido). Al salir por
-## un hueco desaparece enseguida: ya está fuera del tablero y no debe sobrevolar el resto.
+## Cuánto se tarda en desvanecerse una flecha que sale (en casillas de recorrido).
 func _fade_len(i: int) -> float:
-	if _exit_enclosed[i]:
-		return 1.5  # sale por un hueco y detrás hay más tablero: no debe sobrevolarlo
-	return 3.0 if _exit_hole[i] else float(puzzle.arrows[i].cells.size() + 1)
+	return float(puzzle.arrows[i].cells.size() + 1)
 
 
 func _update_moves() -> void:
@@ -277,7 +262,7 @@ func tap_arrow(i: int) -> String:
 	if bl.by == -1:
 		removed[i] = true
 		_occ = Arrows.occupancy(puzzle, removed)
-		_anims[i] = {"kind": "exit", "t": 0.0, "v": 7.0, "end": float(_exit_len[i]) + _fade_len(i)}
+		_anims[i] = {"kind": "exit", "t": 0.0, "v": EXIT_V0, "end": float(_exit_len[i]) + _fade_len(i)}
 		_combo = _combo + 1 if _clock - _last_exit < 1.2 else 1
 		if _combo >= 3:
 			_combo_points += 5 * (_combo - 2)
@@ -377,7 +362,7 @@ func _process(delta: float) -> void:
 	for i in _anims.keys():
 		var an: Dictionary = _anims[i]
 		if an.kind == "exit":
-			an.v += 75.0 * delta
+			an.v = minf(an.v + EXIT_ACC * delta, EXIT_VMAX)
 			an.t += an.v * delta
 			if an.t >= an.end:
 				_anims.erase(i)
@@ -526,6 +511,11 @@ func _clamp_pan() -> void:
 
 ## Radio del dedo (px de pantalla de diseño) y margen para preferir una flecha libre.
 const DOT_COL := Color8(196, 204, 221)  # puntos del fondo, más marcados que Style.DOT
+# Salida de una flecha (casillas/s): arranca despacio, acelera con suavidad y no pasa de un tope.
+const EXIT_V0 := 4.0
+const EXIT_ACC := 26.0
+const EXIT_VMAX := 16.0
+const SHADOW_FLAT := Color8(234, 237, 245)  # sombra del tablero opaca: al solaparse no deja rayas
 const FINGER_PX := 46.0
 const FAIR_PX := 22.0
 
@@ -776,17 +766,6 @@ func _draw_shape() -> void:
 		Style.soft_shadow(board, card, 44.0, Style.SHADOW, 22.0, Vector2(0, 12))
 		Style.fill_round(board, card, 44.0, Style.CARD)
 		return
-	if _corridor.is_empty():
-		# Huecos por los que salen las flechas (los que recorre su cabeza al desvanecerse).
-		for i in puzzle.arrows.size():
-			if _exit_hole[i]:
-				var hd: Vector2i = Arrows.head(puzzle.arrows[i]) + puzzle.arrows[i].dir * (_exit_len[i] + 1)
-				for k in 3:
-					var cc: Vector2i = hd + puzzle.arrows[i].dir * k
-					if not _holes.has(cc):
-						break
-					_corridor[cc] = true
-		_corridor[Vector2i(-1, -1)] = true  # marca de "ya calculado"
 	# Casillas solapadas con esquinas poco redondeadas: el borde queda escalonado y limpio.
 	# Margen amplio y esquinas grandes: los entrantes se suavizan y las flechas del borde
 	# quedan claramente dentro del tablero.
@@ -799,18 +778,9 @@ func _draw_shape() -> void:
 					continue
 				var r := Rect2(_origin + Vector2(x, y) * _cell, Vector2(_cell, _cell)).grow(g)
 				if pass_i == 0:
-					Style.fill_round(board, Rect2(r.position + Vector2(0, 10), r.size).grow(6), rad, Color(Style.SHADOW, 0.035), 4)
+					Style.fill_round(board, Rect2(r.position + Vector2(0, 10), r.size).grow(6), rad, SHADOW_FLAT, 4)
 				else:
 					Style.fill_round(board, r, rad, Style.CARD, 4)
-	# Canales de salida: el hueco por el que sale una flecha es EXTERIOR al tablero. Se pinta
-	# del color del fondo, de una casilla de ancho y centrado en la línea de la flecha: así se ve
-	# dónde sale y que lo que haya más allá ya no cuenta.
-	for c in _corridor:
-		if c.x < 0:
-			continue
-		var cr := Rect2(_origin + Vector2(c) * _cell, Vector2(_cell, _cell))
-		Style.fill_round(board, cr, _cell * 0.3, Color(Style.BG, 1.0), 4)
-		Style.fill_round(board, Rect2(cr.position, Vector2(cr.size.x, _cell * 0.1)), _cell * 0.05, Color(Style.SHADOW, 0.05), 3)
 
 
 ## Obstáculo: bloque de piedra oscuro con relieve, claramente infranqueable.
