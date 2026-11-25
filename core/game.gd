@@ -4,6 +4,7 @@ extends Node
 const Daily = preload("res://core/daily.gd")
 const Levels = preload("res://game/levels.gd")
 const Arrows = preload("res://game/arrows.gd")
+const Baked = preload("res://game/baked.gd")
 const I18n = preload("res://core/i18n.gd")
 
 const MAX_LIVES := 3
@@ -18,6 +19,8 @@ var lives := MAX_LIVES
 var hints_used := 0
 var mistakes := 0
 var elapsed := 0.0
+var _baked: Array = []
+var _baked_loaded := false
 
 
 func _ready() -> void:
@@ -76,9 +79,22 @@ func puzzle_for_level(n: int) -> Dictionary:
 		_mutex.unlock()
 		if not cached.is_empty():
 			return cached
-	var p := generate_locked(Levels.seed_for(n), Levels.params_for(n))
+	var p := make_level(n)
 	_store(key, p)
 	return p
+
+
+## Nivel n: el horneado si existe (fijo para siempre); si no, generado por su semilla.
+func make_level(n: int) -> Dictionary:
+	_mutex.lock()
+	if not _baked_loaded:
+		_baked = Baked.load_all()
+		_baked_loaded = true
+	var blk: PackedByteArray = _baked[n - 1] if n >= 1 and n <= _baked.size() else PackedByteArray()
+	_mutex.unlock()
+	if not blk.is_empty():
+		return Baked.decode(blk)
+	return generate_locked(Levels.seed_for(n), Levels.params_for(n))
 
 
 ## El generador no admite dos ejecuciones simultáneas (comparte estado interno y el resultado
@@ -109,7 +125,7 @@ func prefetch(n: int) -> void:
 	_prefetching = n
 	_thread = Thread.new()
 	_thread.start(func():
-		var p := generate_locked(Levels.seed_for(n), Levels.params_for(n))
+		var p := make_level(n)
 		_store("L%d" % n, p))
 
 

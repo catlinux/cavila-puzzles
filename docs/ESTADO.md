@@ -8,8 +8,10 @@ Un solo juego: se tocan flechas y salen deslizándose en su dirección. Si otra 
 se pierde una luz (3 vidas). Tiene pistas (máx. 5), estrellas, reto diario, racha, ligas, miles de
 niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas azul marino, color de acento por mundo).
 
-## Niveles: deterministas
-La semilla de cada nivel sale solo de su número (`Levels.seed_for`) y el generador usa su propio RNG: el mismo nivel sale idéntico en cualquier móvil y ejecución (comprobado con hash en dos procesos). Un nivel pesa ~0,3-1 KB en formato compacto (10.000 niveles ≈ 8 MB sin comprimir). Riesgo: cambiar el generador cambia los niveles; si hace falta fijarlos, hornearlos a fichero.
+## Niveles fijos
+- Niveles 1-1000 **horneados** en `game/levels_baked.bin` (0,9 MB, zstd): `Game.make_level` los lee de ahí, así que son iguales para todos y no cambian aunque se toque el generador. Formato y codificación en `game/baked.gd`. Incluido en el APK vía `include_filter` de `export_presets.cfg`.
+- Del 1001 en adelante se generan por semilla (deterministas: mismo tablero en todos los móviles). `tests/test_baked.gd` guarda la huella de los niveles 1001, 1500 y 3000: si falla, el generador ha cambiado y esos niveles cambiarían para los jugadores (o es intencionado y hay que hornear más antes).
+- Regenerar / ampliar: `tools/bake_levels.gd` (`COUNT`). En paralelo: 4 procesos con `-- desde hasta trozo.bin` y luego `-- --merge trozos...` (~1 min en total). **Ojo:** volver a hornear con un generador distinto cambia niveles que la gente ya ha jugado.
 
 ## Reglas ya implementadas
 - Una flecha que sale del tablero desaparece y no puede volver a entrar ni chocar más allá.
