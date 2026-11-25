@@ -8,6 +8,9 @@ Un solo juego: se tocan flechas y salen deslizándose en su dirección. Si otra 
 se pierde una luz (3 vidas). Tiene pistas (máx. 5), estrellas, reto diario, racha, ligas, miles de
 niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas azul marino, color de acento por mundo).
 
+## Niveles: deterministas
+La semilla de cada nivel sale solo de su número (`Levels.seed_for`) y el generador usa su propio RNG: el mismo nivel sale idéntico en cualquier móvil y ejecución (comprobado con hash en dos procesos). Un nivel pesa ~0,3-1 KB en formato compacto (10.000 niveles ≈ 8 MB sin comprimir). Riesgo: cambiar el generador cambia los niveles; si hace falta fijarlos, hornearlos a fichero.
+
 ## Reglas ya implementadas
 - Una flecha que sale del tablero desaparece y no puede volver a entrar ni chocar más allá.
 - Las rocas son infranqueables.
@@ -16,7 +19,7 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 - Zoom y desplazamiento con pellizco; música ambiente con deslizadores; sonidos zen; vibración suave.
 - Esquinas de flecha redondeadas (`CORNER_RADIUS` 0.2 en `ui/play.gd`).
 - Fondo del tablero con margen amplio (0,62 casillas) y esquinas grandes: contorno suave, flechas del borde claramente dentro. Puntos del fondo más marcados (`DOT_COL`).
-- Las flechas que salen por un hueco lo hacen por un pasillo de fondo blanco (`_corridor`, las 3 casillas que tarda en desvanecerse), no pegadas al borde. Contorno blanco fino en la flecha que sale o se toca. La animación de salida es la original (se probó impulso+estela+brillo y no gustó: descartado).
+- **Huecos = exterior.** Una flecha con un hueco justo delante ya ha salido, aunque más allá haya otra flecha (regla de `Arrows.exit_path`). Para que se vea, cada hueco de salida (hasta 3 casillas) se pinta como un canal gris de una casilla centrado en la línea de la flecha (`_corridor`, en `_draw_shape`). Si tras el hueco vuelve a haber tablero (`_exit_enclosed`) la flecha se desvanece en 1,5 casillas y no sobrevuela lo de detrás. Antes se pintaba de blanco y la pista parecía errónea. La animación de salida es la original.
 
 ## Entrada táctil (ui/play.gd)
 Pulsar resalta la flecha candidata y soltar la activa. El radio de toque (~46 px) se adapta a la casilla y
