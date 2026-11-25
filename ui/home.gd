@@ -191,13 +191,19 @@ func _show_league_results() -> void:
 	vb.add_theme_constant_override("separation", 18)
 	panel.add_child(vb)
 	var ic := TextureRect.new()
-	ic.texture = Style.icon("trophy-fill" if res.rank <= 3 else "crown-fill", Style.GOLD if res.rank <= 3 else world.a, 110)
-	ic.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	var hints_before := Progress.hints()
+	var change := Progress.claim_league(res.key)
+	if change > 0:
+		ic.texture = Style.reward_art("rise")  # ascenso de división
+		ic.custom_minimum_size = Vector2(0, 150)
+		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	else:
+		ic.texture = Style.icon("trophy-fill" if res.rank <= 3 else "crown-fill", Style.GOLD if res.rank <= 3 else world.a, 110)
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	vb.add_child(ic)
 	vb.add_child(Style.label(tr("LEAGUE_END") % tr("LEAGUE_" + String(res.type).to_upper()).to_lower(), 44, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
 	vb.add_child(Style.label(tr("YOUR_RANK") % [res.rank, res.size], 34, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER))
-	var hints_before := Progress.hints()
-	var change := Progress.claim_league(res.key)
 	var got := Progress.hints() - hints_before
 	if got > 0:
 		vb.add_child(Style.label((tr("HINT_BONUS") if got == 1 else tr("HINT_BONUS_N")) % got, 38, Style.GOLD, "display", HORIZONTAL_ALIGNMENT_CENTER))

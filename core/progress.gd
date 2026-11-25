@@ -172,6 +172,15 @@ func league_standings(lg: Dictionary, at: int = -1) -> Array:
 	return Leagues.standings(inst, float(lg.calib), int(lg.division), int(lg.points), now() if at < 0 else at, tr("YOU"))
 
 
+## Aviso en vivo de una liga ("X te ha adelantado", "a N puntos del puesto K"); recuerda
+## quién iba por delante para detectar adelantamientos la próxima vez.
+func league_notice(lg: Dictionary) -> Dictionary:
+	var n := Leagues.notice(league_standings(lg), lg.get("seen", null))
+	lg["seen"] = n.ahead
+	save()
+	return n
+
+
 ## Ligas terminadas en las que has participado y aún no has visto el resultado.
 func pending_league_results() -> Array:
 	var out := []

@@ -5,8 +5,11 @@ extends RefCounted
 ## depende solo de la hora, así que la clasificación evoluciona de forma creíble y coherente
 ## aunque se cierre el juego. El ritmo se calibra con el nivel del jugador al entrar.
 ##
-## IMPORTANTE: antes de publicar, sustituir por jugadores reales (servidor) o indicar en la
-## interfaz que los rivales son simulados.
+## Para que parezca gente real: más actividad por la tarde y la noche, habilidad con cola
+## larga (pocos muy buenos, muchos casuales), puntos a saltos al terminar cada nivel, un grupo
+## de rivales "habituales" que reaparecen entre ligas con su propio nivel, y rivales más fuertes
+## en las divisiones altas. La interfaz avisa de que son simulados; al pasar a rivales reales
+## (servidor), quitar ese aviso.
 
 const Rng = preload("res://core/rng.gd")
 const Levels = preload("res://game/levels.gd")
@@ -66,24 +69,45 @@ static func points_per_level(level: int) -> float:
 	return float(Levels.score(arrows, t, rival * 0.85, 2, 40, rival))
 
 
-## Identidades (avatar + nombre) de los participantes simulados de una liga. Deterministas por
-## la clave de la liga, con avatares y nombres todos distintos y coherentes entre sí.
-static func identities(key: String, count: int) -> Array:
+## Actividad relativa por hora local (0-23): poca de madrugada, mucha por la tarde y la noche.
+const ACTIVITY := [0.30, 0.15, 0.08, 0.05, 0.05, 0.08, 0.20, 0.40, 0.55, 0.60, 0.60, 0.70,
+	0.85, 0.90, 0.75, 0.70, 0.80, 0.95, 1.00, 1.00, 1.00, 0.95, 0.75, 0.50]
+const REGULARS := 14   # rivales habituales que reaparecen entre ligas
+const TZ_BIAS_MIN := 60  # las horas de actividad se calculan en hora peninsular
+
+
+## Rivales habituales: siempre los mismos (avatar + nombre + habilidad propia).
+static func regulars() -> Array:
+	var ids := _pick_identities("habituales", REGULARS, [], {})
+	for r in ids:
+		r["skill"] = _skill(Rng.make(Rng.hash_string("hab:" + r.name)))
+	return ids
+
+
+## Habilidad con cola larga: la mayoría casuales (~0,6-1,0) y muy pocos muy buenos (hasta ~2,4).
+static func _skill(rng: RefCounted) -> float:
+	return 0.55 + 1.9 * pow(rng.randf(), 3.0)
+
+
+## Elige `count` identidades distintas evitando avatares/familias/nombres ya usados.
+static func _pick_identities(key: String, count: int, taken_avatars: Array, taken_names: Dictionary) -> Array:
 	var rng := Rng.make(Rng.hash_string("liga-id:" + key))
 	var order: Array = Rng.shuffle(range(AVATAR_COUNT), rng)
 	var used_kin := {}
+	for a in taken_avatars:
+		used_kin[AVATAR_KIN[a]] = true
 	var picks := []
 	for a in order:
 		if picks.size() >= count:
 			break
-		if used_kin.has(AVATAR_KIN[a]):
+		if used_kin.has(AVATAR_KIN[a]) or taken_avatars.has(a):
 			continue
 		used_kin[AVATAR_KIN[a]] = true
 		picks.append(a)
 	for a in order:  # solo si faltaran avatares con kin distinto
 		if picks.size() >= count:
 			break
-		if not picks.has(a):
+		if not picks.has(a) and not taken_avatars.has(a):
 			picks.append(a)
 	var pools := {"f": Rng.shuffle(NAMES_F.duplicate(), rng), "m": Rng.shuffle(NAMES_M.duplicate(), rng),
 		"n": Rng.shuffle(NAMES_N.duplicate(), rng)}
@@ -93,10 +117,44 @@ static func identities(key: String, count: int) -> Array:
 		var pool_key := kind
 		if kind == "n" and rng.randf() < 0.45:
 			pool_key = "f" if rng.randf() < 0.5 else "m"  # animal con nombre real
-		if pools[pool_key].is_empty():
-			pool_key = "n" if not pools["n"].is_empty() else ("f" if not pools["f"].is_empty() else "m")
-		out.append({"avatar": a, "name": pools[pool_key].pop_back()})
+		var nm := ""
+		while nm == "":
+			if pools[pool_key].is_empty():
+				pool_key = "n" if not pools["n"].is_empty() else ("f" if not pools["f"].is_empty() else "m")
+				if pools[pool_key].is_empty():
+					nm = "Jugador %d" % (out.size() + 1)
+					break
+			var cand: String = pools[pool_key].pop_back()
+			if not taken_names.has(cand):
+				nm = cand
+		taken_names[nm] = true
+		out.append({"avatar": a, "name": nm})
 	return out
+
+
+## Identidades de los participantes simulados de una liga. Deterministas por la clave de la
+## liga: una parte son rivales habituales (los mismos de otras ligas) y el resto, nuevos; todos
+## con avatares, familias y nombres distintos y coherentes entre sí.
+static func identities(key: String, count: int) -> Array:
+	var rng := Rng.make(Rng.hash_string("liga-reg:" + key))
+	var pool: Array = Rng.shuffle(regulars(), rng)
+	var out := []
+	var used_av := []
+	var used_nm := {}
+	var used_kin := {}
+	var want := mini(maxi(count / 3, 1), pool.size())
+	for r in pool:
+		if out.size() >= want:
+			break
+		if used_kin.has(AVATAR_KIN[r.avatar]):
+			continue
+		used_kin[AVATAR_KIN[r.avatar]] = true
+		used_av.append(r.avatar)
+		used_nm[r.name] = true
+		out.append(r.duplicate())
+	if out.size() < count:
+		out.append_array(_pick_identities(key, count - out.size(), used_av, used_nm))
+	return Rng.shuffle(out, rng)
 
 
 ## Participantes simulados de una liga (sin contar al jugador).
@@ -107,27 +165,41 @@ static func bots(inst: Dictionary, calib: float, division: int = 0) -> Array:
 	var out := []
 	var dur := float(inst.end - inst.start)
 	for k in int(cfg.size) - 1:
+		var skill: float = float(ids[k].skill) if ids[k].has("skill") else _skill(rng)
+		skill *= 1.0 + 0.18 * division  # en divisiones altas se juega más fuerte
 		var lvl_per_hour := rng.randf_range(5.0, 13.0)
-		var skill := rng.randf_range(0.75, 1.25) * (1.0 + 0.12 * division)
+		var per_level := calib * skill * rng.randf_range(0.9, 1.1)
 		var sessions := []
 		if rng.randf() > 0.08:  # unos pocos se apuntan y no juegan
 			var n := 1 + rng.randi() % (2 if inst.type == "flash" else (3 if inst.type == "daily" else 10))
 			for _s in n:
 				var len_s := rng.randf_range(6.0, 35.0) * 60.0
-				var at := rng.randf_range(0.0, maxf(dur - len_s, 1.0))
-				sessions.append([at, len_s])
-		out.append({"name": ids[k].name, "avatar": ids[k].avatar,
-			"rate": calib * lvl_per_hour * skill / 3600.0, "sessions": sessions})
+				sessions.append([_session_start(rng, inst, dur, len_s), len_s])
+		out.append({"name": ids[k].name, "avatar": ids[k].avatar, "per_level": per_level,
+			"lph": lvl_per_hour / 3600.0, "rate": per_level * lvl_per_hour / 3600.0, "sessions": sessions})
 	return out
 
 
-## Puntos de un participante simulado en el instante `now` (crece con el tiempo).
+## Inicio de una sesión de juego: más probable a las horas de más actividad.
+static func _session_start(rng: RefCounted, inst: Dictionary, dur: float, len_s: float) -> float:
+	var at := 0.0
+	for _try in 12:
+		at = rng.randf_range(0.0, maxf(dur - len_s, 1.0))
+		var hour := int(floorf((float(inst.start) + at) / 3600.0 + TZ_BIAS_MIN / 60.0)) % 24
+		if rng.randf() < ACTIVITY[hour]:
+			break
+	return at
+
+
+## Puntos de un participante simulado en el instante `now`: suben a saltos, al completar
+## cada nivel (nunca bajan).
 static func bot_points(bot: Dictionary, inst: Dictionary, now: int) -> int:
 	var t := float(now - inst.start)
-	var total := 0.0
+	var total := 0
 	for s in bot.sessions:
-		total += clampf(t - s[0], 0.0, s[1]) * bot.rate
-	return int(total)
+		var levels := int(floorf(clampf(t - s[0], 0.0, s[1]) * bot.lph))
+		total += int(levels * bot.per_level)
+	return total
 
 
 ## Clasificación: [{name, points, avatar (-1 = tú), you}] ordenada de mayor a menor.
@@ -150,3 +222,27 @@ static func rank_of_you(rows: Array) -> int:
 static func prize(type: String, rank: int) -> int:
 	var p: Array = CONFIG[type].prizes
 	return p[rank - 1] if rank >= 1 and rank <= p.size() else 0
+
+
+## Aviso en vivo para el jugador. `seen` = nombres que iban por delante la última vez que miró
+## (null si es la primera vez). Devuelve {key, args, ahead}: "X te ha adelantado" si alguien
+## nuevo le supera; si no, los puntos que le faltan para el puesto anterior, o su ventaja si va primero.
+static func notice(rows: Array, seen: Variant) -> Dictionary:
+	var rank := rank_of_you(rows)
+	var ahead := []
+	for k in rank - 1:
+		ahead.append(rows[k].name)
+	var out := {"key": "", "args": [], "ahead": ahead}
+	if seen != null:
+		for k in range(rank - 2, -1, -1):  # el más cercano primero
+			if not seen.has(rows[k].name):
+				out.key = "LG_PASSED"
+				out.args = [rows[k].name]
+				return out
+	if rank > 1:
+		out.key = "LG_GAP"
+		out.args = [maxi(int(rows[rank - 2].points) - int(rows[rank - 1].points), 1), rank - 1]
+	elif rows.size() > 1:
+		out.key = "LG_LEAD"
+		out.args = [int(rows[0].points) - int(rows[1].points)]
+	return out

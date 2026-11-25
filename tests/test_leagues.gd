@@ -1,5 +1,6 @@
 extends "res://tests/test_case.gd"
 
+const Rng = preload("res://core/rng.gd")
 const Leagues = preload("res://game/leagues.gd")
 const ProgressScript = preload("res://core/progress.gd")
 
@@ -52,6 +53,69 @@ func run() -> void:
 			sorted_ok = false
 	check(sorted_ok, "clasificación ordenada")
 	check(Leagues.prize("daily", 1) == 4 and Leagues.prize("daily", 4) == 0, "premios")
+
+	# Credibilidad: habituales, saltos, habilidad con cola larga, divisiones y avisos.
+	var regs := Leagues.regulars()
+	check(regs.size() == Leagues.REGULARS and var_to_str(regs) == var_to_str(Leagues.regulars()), "rivales habituales fijos")
+	var reg_names := {}
+	for r in regs:
+		reg_names[r.name] = true
+	var shared := 0
+	var wk2 := Leagues.instance("weekly", now + 7 * 86400)
+	var names1 := {}
+	for b in Leagues.bots(wk, calib):
+		names1[b.name] = true
+	for b in Leagues.bots(wk2, calib):
+		if names1.has(b.name) and reg_names.has(b.name):
+			shared += 1
+	check(shared >= 1, "algún rival reaparece de una liga a otra (%d)" % shared)
+	for ty in Leagues.TYPES:
+		var ins := Leagues.instance(ty, now)
+		var av := {}
+		var nm := {}
+		for b in Leagues.bots(ins, calib):
+			av[b.avatar] = true
+			nm[b.name] = true
+		var n_bots: int = Leagues.CONFIG[ty].size - 1
+		check(av.size() == n_bots and nm.size() == n_bots, "%s: avatares y nombres distintos con habituales" % ty)
+	var steps := {}
+	var wbots := Leagues.bots(wk, calib)
+	for b in wbots:
+		for k in 200:
+			var p := Leagues.bot_points(b, wk, wk.start + k * 3000)
+			steps[p] = true
+	check(steps.size() > 20, "los puntos suben a saltos (%d valores)" % steps.size())
+	var sk := []
+	for k in 400:
+		sk.append(Leagues._skill(Rng.make(k)))
+	sk.sort()
+	check(sk[200] < 1.0 and sk[395] > 1.6 and sk[0] >= 0.55, "habilidad con cola larga (mediana %.2f, top %.2f)" % [sk[200], sk[395]])
+	var lo := 0
+	var hi := 0
+	for b in Leagues.bots(wk, calib, 0):
+		lo += Leagues.bot_points(b, wk, wk.end)
+	for b in Leagues.bots(wk, calib, 4):
+		hi += Leagues.bot_points(b, wk, wk.end)
+	check(hi > lo * 1.3, "rivales más fuertes en divisiones altas (%d vs %d)" % [lo, hi])
+	# Actividad: a las 21 h hay más gente jugando que a las 4 h.
+	var evening := 0
+	var night := 0
+	for b in Leagues.bots(wk, calib):
+		for s2 in b.sessions:
+			var h := int(floorf((wk.start + s2[0]) / 3600.0 + 1.0)) % 24
+			if h >= 17 and h <= 22:
+				evening += 1
+			elif h >= 2 and h <= 5:
+				night += 1
+	check(evening > night * 2, "más actividad de tarde que de madrugada (%d vs %d)" % [evening, night])
+	var rws := [{"name": "A", "points": 500, "you": false}, {"name": "B", "points": 300, "you": false},
+		{"name": "Tú", "points": 100, "you": true}]
+	var n0 := Leagues.notice(rws, null)
+	check(n0.key == "LG_GAP" and n0.args == [200, 2], "aviso: a N puntos del puesto K")
+	check(Leagues.notice(rws, ["A"]).key == "LG_PASSED" and Leagues.notice(rws, ["A"]).args == ["B"], "aviso: B te ha adelantado")
+	check(Leagues.notice(rws, ["A", "B"]).key == "LG_GAP", "aviso sin novedades")
+	var first := [{"name": "Tú", "points": 900, "you": true}, {"name": "A", "points": 500, "you": false}]
+	check(Leagues.notice(first, []).key == "LG_LEAD" and Leagues.notice(first, []).args == [400], "aviso: vas primero")
 
 	# Progreso: puntos en todas las ligas, resultados y ascensos.
 	var path := "user://test_leagues.json"

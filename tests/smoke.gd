@@ -83,6 +83,7 @@ func _run() -> void:
 	lgs._select("flash")
 	await _frames(2)
 	check(lgs._list.get_child_count() == 15, "clasificación relámpago de 15")
+	check(lgs._notice.text != "", "aviso en vivo en la pantalla de ligas: " + lgs._notice.text)
 	lgs.queue_free()
 	await _frames(1)
 	Progress.now_override = Progress.now() + 9 * 86400

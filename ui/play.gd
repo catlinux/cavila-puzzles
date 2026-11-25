@@ -905,8 +905,13 @@ func _show_result(is_win: bool, stars: int, bonus: int) -> void:
 
 	if is_win:
 		var rw := "flag"
+		var tier := Levels.tier(Game.level)
 		if Game.mode == "daily":
 			rw = "banner"
+		elif Game.level % Levels.LEVELS_PER_WORLD == 0:
+			rw = "arch"  # último nivel del mundo
+		elif tier == "super" or tier == "extra":
+			rw = "laurel"
 		elif _record:
 			rw = "popper"
 		elif bonus > 0:

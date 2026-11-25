@@ -19,7 +19,7 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 ## Entrada táctil (ui/play.gd)
 Pulsar resalta la flecha candidata y soltar la activa. El radio de toque (~46 px) se adapta a la casilla y
 prefiere flechas libres cercanas. Si hay desplazamiento con zoom, se cancela el candidato. No se midió
-el porcentaje de aciertos (la simulación se colgaba): validar a mano en el móvil y ajustar
+el porcentaje de aciertos (la simulación se colgaba): sigue pendiente; validar a mano en el móvil y ajustar
 `FINGER_PX` y `FAIR_PX` si siguen las falsas pulsaciones.
 
 ## Ligas (game/leagues.gd)
@@ -30,17 +30,15 @@ el porcentaje de aciertos (la simulación se colgaba): validar a mano en el móv
 - Imágenes de liga en `assets/league/`; premios en `assets/rewards/` (se muestra uno en la pantalla de victoria).
 - Aviso «rivales simulados» ya visible en la pantalla de ligas; si se pasa a rivales reales, quitarlo.
 
-### Pendiente: hacer las ligas más creíbles (propuesta, sin implementar)
-1. Curvas de actividad por hora del día (más gente por la tarde y noche).
-2. Habilidad con cola larga (pocos muy buenos, muchos casuales).
-3. Puntos a saltos, al completar cada nivel, no continuos.
-4. Rivales que reaparecen entre ligas, con historia.
-5. Avisos en vivo: "X te ha adelantado", "a 300 puntos del puesto 3".
-6. Rivales más fuertes en divisiones altas.
-7. ~~Marca visible de "simulado".~~ Hecho: nota «Los rivales son simulados» bajo la lista (`SIM_NOTE`, sin probar en Godot).
+### Credibilidad de las ligas (hecho)
+Actividad por hora (más tarde y noche), habilidad con cola larga, puntos a saltos por nivel completado,
+14 rivales habituales que reaparecen entre ligas (`Leagues.regulars()`), rivales más fuertes en divisiones
+altas (+18 % por división), avisos «X te ha adelantado» / «a N puntos del puesto K» (`Leagues.notice`,
+sticky 30 s en `ui/leagues.gd`) y nota «Los rivales son simulados». Todo con tests en `tests/test_leagues.gd`.
 
-## Imágenes aportadas sin usar todavía
-- `assets/rewards/`: arch (mundo completado), laurel (dificultad súper/extra), rise (ascenso de división), stars, progress.
+## Imágenes de premios
+- `assets/rewards/`: `arch` (último nivel de un mundo), `laurel` (niveles súper/extra), `rise` (ascenso de división) ya se usan.
+- Sin usar aún: `stars`, `progress`.
 - Descartadas por texto deformado o "$": laurel original, moneda "100%", cofre "$".
 
 ## Otros pendientes

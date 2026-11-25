@@ -12,6 +12,9 @@ var type := "daily"
 var world: Dictionary = {}
 var _tabs: Array = []
 var _info: Control
+var _notice: Label
+var _sticky := ""  # aviso de adelantamiento: se mantiene un rato
+var _sticky_t := 0.0
 var _list: VBoxContainer
 var _refresh := 0.0
 
@@ -61,6 +64,9 @@ func _ready() -> void:
 	var card := Style.card(44, 18)
 	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(card)
+	_notice = Style.label("", 30, world.a, "display", HORIZONTAL_ALIGNMENT_CENTER)
+	vb.add_child(_notice)
+	vb.move_child(_notice, card.get_index())
 	var note := Style.label(tr("SIM_NOTE"), 24, Style.SUB, "body")
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(note)
@@ -83,6 +89,8 @@ func _notification(what: int) -> void:
 func _select(t: String) -> void:
 	type = t
 	Game.selected_league = t
+	_sticky = ""
+	_sticky_t = 0.0
 	for k in _tabs.size():
 		_tabs[k].primary = Leagues.TYPES[k] == t
 		_tabs[k].queue_redraw()
@@ -91,6 +99,7 @@ func _select(t: String) -> void:
 
 func _process(delta: float) -> void:
 	_refresh += delta
+	_sticky_t = maxf(_sticky_t - delta, 0.0)
 	_info.queue_redraw()
 	if _refresh > 5.0:  # los rivales siguen jugando: refrescar la tabla
 		_refresh = 0.0
@@ -104,6 +113,11 @@ func _rebuild() -> void:
 	var rows := Progress.league_standings(lg)
 	for k in rows.size():
 		_list.add_child(_row(k + 1, rows[k], rows.size()))
+	var n := Progress.league_notice(lg)
+	if n.key == "LG_PASSED":
+		_sticky = tr(n.key) % n.args
+		_sticky_t = 30.0
+	_notice.text = _sticky if _sticky_t > 0.0 else (tr(n.key) % n.args if n.key != "" else "")
 
 
 func _row(rank: int, r: Dictionary, total: int) -> Control:
