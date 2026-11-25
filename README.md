@@ -22,10 +22,10 @@ se sintetiza por código. Textos en **español** y **catalán**.
   serpentean y llenan todo el tablero. Se generan cubriendo el tablero con caminos largos (regla de
   Warnsdorff) y fijando la punta de cada uno con una simulación inversa de la partida, lo que
   garantiza la solución.
-- **Reglas de salida**: una flecha sale al llegar al borde de la cuadrícula o al entrar en el exterior
-  visible del tablero (una muesca grande del contorno, conectada con fuera). Los huecos estrechos y los
-  bolsillos interiores no son salida: se cruzan como vacío y lo que haya detrás (otra flecha o una roca)
-  sigue bloqueando. Las rocas son infranqueables.
+- **Reglas de salida**: una flecha sale al llegar al borde de la cuadrícula o al primer hueco (el exterior
+  del tablero), siempre de frente contra un lado recto. Las formas del tablero tienen escalones anchos y
+  planos (bloques de 2-3 casillas), sin muescas de una casilla ni agujeros cerrados en medio, y las flechas
+  tienen un margen blanco generoso alrededor. Las rocas son infranqueables.
 - **Zoom** pellizcando y desplazamiento arrastrando en los tableros grandes.
 - **Puntuación** por nivel (flechas, dificultad, errores, combos y rapidez) con récord personal, y un
   **rival de la máquina** que avanza a su ritmo mientras juegas.

@@ -77,7 +77,63 @@ static func make(kind: String, w: int, h: int, rng: RandomNumberGenerator) -> Di
 					if not rocks.has(o):
 						rocks.append(o)
 					o += [Vector2i(1, 0), Vector2i(0, 1)][rng.randi() % 2]
+	if not holes.is_empty():
+		holes = _chunk(holes, w, h, 3 if mini(w, h) >= 12 else 2)
 	return {"holes": holes, "rocks": rocks}
+
+
+## Engorda el contorno en bloques de b x b casillas: cada bloque entero es hueco o es tablero.
+## Así los escalones son anchos y planos (las flechas salen siempre de frente contra un lado
+## recto, nunca por un rincón), no hay muescas de una casilla y todo hueco toca el borde de la
+## cuadrícula (nunca hay agujeros cerrados en medio del tablero). Los bloques se alinean al
+## centro, así la forma sigue siendo simétrica.
+static func _chunk(holes: Array, w: int, h: int, b: int) -> Array:
+	var set := {}
+	for c in holes:
+		set[c] = true
+	var nx := (w + b - 1) / b
+	var ny := (h + b - 1) / b
+	var ox := (nx * b - w) / 2
+	var oy := (ny * b - h) / 2
+	var out := []
+	for by in ny:
+		for bx in nx:
+			var cx := clampi(bx * b + b / 2 - ox, 0, w - 1)
+			var cy := clampi(by * b + b / 2 - oy, 0, h - 1)
+			if not set.has(Vector2i(cx, cy)):
+				continue
+			for dy in b:
+				for dx in b:
+					var x := bx * b + dx - ox
+					var y := by * b + dy - oy
+					if x >= 0 and y >= 0 and x < w and y < h:
+						out.append(Vector2i(x, y))
+	return _drop_enclosed(out, w, h)
+
+
+## Quita los huecos que no están conectados con el borde de la cuadrícula (se vuelven tablero).
+static func _drop_enclosed(holes: Array, w: int, h: int) -> Array:
+	var set := {}
+	for c in holes:
+		set[c] = true
+	var seen := {}
+	var stack := []
+	for c in holes:
+		if c.x == 0 or c.y == 0 or c.x == w - 1 or c.y == h - 1:
+			seen[c] = true
+			stack.append(c)
+	while not stack.is_empty():
+		var c: Vector2i = stack.pop_back()
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + d
+			if set.has(n) and not seen.has(n):
+				seen[n] = true
+				stack.append(n)
+	var out := []
+	for c in holes:
+		if seen.has(c):
+			out.append(c)
+	return out
 
 
 ## Proporción del rectángulo que se puede usar (para compensar el tamaño).

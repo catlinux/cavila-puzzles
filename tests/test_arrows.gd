@@ -2,6 +2,8 @@ extends "res://tests/test_case.gd"
 
 const Arrows = preload("res://game/arrows.gd")
 const Levels = preload("res://game/levels.gd")
+const Shapes = preload("res://game/shapes.gd")
+const Rng = preload("res://core/rng.gd")
 
 
 func _init() -> void:
@@ -85,30 +87,25 @@ func run() -> void:
 		check(all_ok, "la solución se puede jugar paso a paso " + tag)
 	print("    generador: %d niveles en %d ms (peor %d ms)" % [samples.size(), Time.get_ticks_msec() - t0, worst])
 
-	# Los huecos son solo forma: se cruzan como espacio vacío y lo que haya al otro lado bloquea.
-	# Columna 0 de 3x5: A apunta hacia arriba desde abajo; (0,2) es un hueco; más arriba, en
-	# (0,0)-(1,0), hay otra flecha B. A cruza el hueco y choca con B: solo se sale por el borde exterior.
+	# Un hueco es el exterior del tablero: la flecha que llega a él ya ha salido y no choca con
+	# nada de más allá. Columna 0 de 3x5: A apunta hacia arriba desde abajo; (0,2) es un hueco;
+	# más arriba, en (0,0)-(1,0), hay otra flecha B (o una roca) que no cuenta.
 	var reent := {"w": 3, "h": 5, "rocks": [], "holes": [Vector2i(0, 2)], "arrows": [
 		_arrow([Vector2i(0, 4), Vector2i(0, 3)]),
 		_arrow([Vector2i(0, 0), Vector2i(1, 0)])]}
 	check(Arrows.validate(reent).ok, "tablero con hueco válido")
-	check(Arrows.exit_path(reent, 0).size() == 3, "la salida cruza el hueco hasta el borde (3 casillas)")
-	var reent_occ := Arrows.occupancy(reent)
-	check(Arrows.blocker(reent, 0, reent_occ).by == 1, "A choca con B aunque haya un hueco en medio")
-	check(Arrows.solve(reent).free0 == 1, "solo B puede salir al principio")
-	check(Arrows.solve(reent).solvable, "y el tablero se resuelve quitando B y luego A")
-	# Una roca más allá del hueco también bloquea.
+	check(Arrows.exit_path(reent, 0).is_empty(), "la salida termina en el hueco")
+	check(Arrows.blocker(reent, 0, Arrows.occupancy(reent)).by == -1, "A sale: lo que hay más allá del hueco no cuenta")
+	check(Arrows.solve(reent).free0 == 2, "las dos flechas pueden salir desde el principio")
 	var reent_rock := reent.duplicate(true)
 	reent_rock.rocks = [Vector2i(0, 1)]
 	reent_rock.arrows.pop_back()
-	check(Arrows.blocker(reent_rock, 0, Arrows.occupancy(reent_rock)).by == Arrows.ROCK, "una roca más allá del hueco bloquea")
-	# Sin nada más allá, la flecha sale por el borde.
-	var clear_p := reent.duplicate(true)
-	clear_p.arrows.pop_back()
-	check(Arrows.blocker(clear_p, 0, Arrows.occupancy(clear_p)).by == -1, "sin nada más allá, A sale por el borde")
-	# Muesca exterior grande: la flecha que entra en el vacío visible ya ha salido y no choca con lo
-	# de más allá. Tablero en U de 9x5: brazos en columnas 0-2 y 6-8, muesca de columnas 3-5 abierta
-	# por arriba (filas 0-3). A (izquierda) apunta a la derecha; B (derecha) está al otro lado.
+	check(Arrows.blocker(reent_rock, 0, Arrows.occupancy(reent_rock)).by == -1, "una roca más allá del hueco tampoco bloquea")
+	var no_hole := reent.duplicate(true)
+	no_hole.erase("_xm")
+	no_hole.holes = []
+	check(Arrows.blocker(no_hole, 0, Arrows.occupancy(no_hole)).by == 1, "sin hueco, la flecha choca con la de delante")
+	# Muesca en U de 9x5 (columnas 3-5 vacías, filas 0-3): la flecha de la izquierda sale de frente.
 	var notch_holes := []
 	for y in 4:
 		for x in range(3, 6):
@@ -116,17 +113,7 @@ func run() -> void:
 	var notch := {"w": 9, "h": 5, "rocks": [], "holes": notch_holes, "arrows": [
 		_arrow([Vector2i(1, 1), Vector2i(2, 1)]),
 		_arrow([Vector2i(6, 1), Vector2i(7, 1)])]}
-	check(Arrows.validate(notch).ok, "tablero en U válido")
-	var nm := Arrows.exit_mask(9, 5, notch_holes)
-	check(nm[1 * 9 + 4] == 1 and nm[1 * 9 + 3] == 0 and nm[3 * 9 + 4] == 0, "solo el centro de la muesca es exterior (el resto es margen)")
-	check(Arrows.exit_path(notch, 0).size() == 1, "la salida termina al entrar en el exterior (1 casilla de margen)")
-	check(Arrows.blocker(notch, 0, Arrows.occupancy(notch)).by == -1, "A sale: lo de más allá de la muesca no cuenta")
-	# Un bolsillo interior (sin conexión con el exterior) no es salida, aunque sea grande.
-	var pocket_holes := []
-	for y in range(1, 4):
-		for x in range(3, 6):
-			pocket_holes.append(Vector2i(x, y))
-	check(Arrows.exit_mask(9, 5, pocket_holes).count(1) == 0, "un bolsillo interior no es exterior")
+	check(Arrows.validate(notch).ok and Arrows.blocker(notch, 0, Arrows.occupancy(notch)).by == -1, "en la muesca, A sale sin chocar con B")
 	# Propiedad sobre niveles reales con huecos: toda salida llega hasta el borde exterior
 	# y solo la bloquea lo que haya en su línea.
 	var wh_levels := 0
@@ -140,7 +127,6 @@ func run() -> void:
 		if g3.is_empty():
 			continue
 		wh_levels += 1
-		var xm3 := Arrows.exit_mask(g3.w, g3.h, g3.holes)
 		var holes3 := {}
 		for c in g3.holes:
 			holes3[c] = true
@@ -151,11 +137,10 @@ func run() -> void:
 			var cc: Vector2i = Arrows.head(a3) + a3.dir
 			var crossed := false
 			while Arrows.inside(g3, cc):
-				if xm3[cc.y * g3.w + cc.x] == 1:
-					break
-				raw.append(cc)
 				if holes3.has(cc):
 					crossed = true
+					break
+				raw.append(cc)
 				cc += a3.dir
 			if Arrows.exit_path(g3, i) != raw:
 				wh_bad += 1
@@ -169,7 +154,49 @@ func run() -> void:
 				wh_cross += 1
 		check(Arrows.solve(g3).solvable and Arrows.validate(g3).ok, "nivel %d con huecos: válido y resoluble" % lv)
 	check(wh_levels >= 20, "se han revisado niveles con huecos (%d)" % wh_levels)
-	check(wh_bad == 0, "la salida llega al borde o al exterior visible (%d fallos, %d salidas cruzan huecos de margen)" % [wh_bad, wh_cross])
+	check(wh_bad == 0, "la salida termina en el borde o en el primer hueco (%d fallos, %d salidas acaban en un hueco)" % [wh_bad, wh_cross])
+
+	# Formas: escalones anchos y planos. Ningún hueco es una muesca fina ni un agujero cerrado.
+	var shape_bad := 0
+	var shape_n := 0
+	for kind in Shapes.KINDS:
+		for sz in [Vector2i(6, 9), Vector2i(9, 13), Vector2i(12, 16), Vector2i(17, 25), Vector2i(23, 34), Vector2i(31, 44), Vector2i(32, 50)]:
+			var sh := Shapes.make(kind, sz.x, sz.y, Rng.make(7))
+			var hs := {}
+			for c in sh.holes:
+				hs[c] = true
+			shape_n += 1
+			# Todo hueco forma parte de un bloque de 2x2 huecos (las casillas fuera de la cuadrícula cuentan como hueco).
+			for c in sh.holes:
+				var in_block := false
+				for ox in [-1, 0]:
+					for oy in [-1, 0]:
+						var all_h := true
+						for dx in 2:
+							for dy in 2:
+								var qq: Vector2i = c + Vector2i(ox + dx, oy + dy)
+								if qq.x >= 0 and qq.y >= 0 and qq.x < sz.x and qq.y < sz.y and not hs.has(qq):
+									all_h = false
+						if all_h:
+							in_block = true
+				if not in_block:
+					shape_bad += 1
+			# Todo hueco está conectado con el borde de la cuadrícula.
+			var seen := {}
+			var stack := []
+			for c in sh.holes:
+				if c.x == 0 or c.y == 0 or c.x == sz.x - 1 or c.y == sz.y - 1:
+					seen[c] = true
+					stack.append(c)
+			while not stack.is_empty():
+				var c: Vector2i = stack.pop_back()
+				for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					if hs.has(c + d) and not seen.has(c + d):
+						seen[c + d] = true
+						stack.append(c + d)
+			if seen.size() != hs.size():
+				shape_bad += 1
+	check(shape_bad == 0, "formas sin muescas finas ni agujeros cerrados (%d fallos en %d formas)" % [shape_bad, shape_n])
 
 	# Formas y obstáculos.
 	var rock_p := {"w": 5, "h": 3, "rocks": [Vector2i(4, 1)], "holes": [Vector2i(0, 0)], "arrows": [_arrow([Vector2i(1, 1), Vector2i(2, 1)])]}

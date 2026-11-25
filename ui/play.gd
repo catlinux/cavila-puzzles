@@ -773,8 +773,8 @@ func _draw_shape() -> void:
 	# Casillas solapadas con esquinas poco redondeadas: el borde queda escalonado y limpio.
 	# Margen amplio y esquinas grandes: los entrantes se suavizan y las flechas del borde
 	# quedan claramente dentro del tablero.
-	g = _cell * 0.62
-	var rad := _cell * 0.55
+	g = _cell * 0.7
+	var rad := _cell * 0.6
 	for pass_i in 2:
 		for y in puzzle.h:
 			for x in puzzle.w:

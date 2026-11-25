@@ -10,18 +10,18 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 
 ## Niveles fijos
 - Niveles 1-1000 **horneados** en `game/levels_baked.bin` (0,9 MB, zstd): `Game.make_level` los lee de ahí, así que son iguales para todos y no cambian aunque se toque el generador. Formato y codificación en `game/baked.gd`. Incluido en el APK vía `include_filter` de `export_presets.cfg`.
-- Al cambiar la regla de huecos se volvieron a hornear los 1000 niveles (por tercera vez) (cambian respecto a versiones anteriores del APK). Del 1001 en adelante se generan por semilla (deterministas: mismo tablero en todos los móviles). `tests/test_baked.gd` guarda la huella de los niveles 1001, 1500 y 3000: si falla, el generador ha cambiado y esos niveles cambiarían para los jugadores (o es intencionado y hay que hornear más antes).
+- Al cambiar la regla de huecos se volvieron a hornear los 1000 niveles (por cuarta vez) (cambian respecto a versiones anteriores del APK). Del 1001 en adelante se generan por semilla (deterministas: mismo tablero en todos los móviles). `tests/test_baked.gd` guarda la huella de los niveles 1001, 1500 y 3000: si falla, el generador ha cambiado y esos niveles cambiarían para los jugadores (o es intencionado y hay que hornear más antes).
 - Regenerar / ampliar: `tools/bake_levels.gd` (`COUNT`). En paralelo: 4 procesos con `-- desde hasta trozo.bin` y luego `-- --merge trozos...` (~1 min en total). **Ojo:** volver a hornear con un generador distinto cambia niveles que la gente ya ha jugado.
 
 ## Reglas ya implementadas
-- Una flecha sale al llegar al borde de la cuadrícula o al entrar en el **exterior visible** (`Arrows.exit_mask`: huecos sin ninguna casilla de tablero en sus 8 vecinas y conectados con el borde). Huecos estrechos y bolsillos interiores se cruzan y lo de detrás bloquea.
+- Una flecha sale al llegar al borde de la cuadrícula o al **primer hueco** (el exterior), de frente contra un lado recto; no choca con nada más allá.
 - Las rocas son infranqueables.
 - Tableros hasta 32x50 hacia el nivel ~150, con formas variadas, flechas largas tipo serpiente y niveles tipo laberinto.
 - Categorías de dificultad (respiro, normal, difícil, súper difícil, extra) intercaladas.
 - Zoom y desplazamiento con pellizco; música ambiente con deslizadores; sonidos zen; vibración suave.
 - Esquinas de flecha redondeadas (`CORNER_RADIUS` 0.2 en `ui/play.gd`).
 - Fondo del tablero con margen amplio (0,62 casillas) y esquinas grandes: contorno suave, flechas del borde claramente dentro. Puntos del fondo más marcados (`DOT_COL`).
-- **Salida = borde o exterior visible.** `exit_mask` marca el exterior: huecos cuyas 8 vecinas son huecos (el margen blanco de 0,62 casillas tapa el resto, así que a la vista son tablero) y conectados con el borde de la cuadrícula. `exit_path`, generador y solucionador usan esa misma definición. Historial: regla «cualquier hueco = salida» (una flecha parecía tapada en una muesca estrecha) → «los huecos se cruzan» (una flecha chocaba tras salir por una muesca grande, nivel 60) → la actual. Sombra del tablero opaca (`SHADOW_FLAT`). Velocidad de salida: `EXIT_V0` 5, `EXIT_ACC` 48, `EXIT_VMAX` 30 en `ui/play.gd`.
+- **Salida = borde o primer hueco, siempre por un lado plano.** Las formas (`Shapes._chunk`) se engordan en bloques de 3 casillas (2 en tableros pequeños): escalones anchos y planos, sin muescas de 1 casilla ni huecos cerrados (`_drop_enclosed`), probado en `tests/test_arrows.gd`. Margen blanco del tablero 0,7 casillas (`g` en `_draw_shape`). Así una flecha ni sale por un rincón ni va rozando el borde. Historial: «cualquier hueco = salida» con muescas finas (confundía) → «los huecos se cruzan» (chocaba tras salir, nivel 60) → «exterior visible» (una flecha corría por el filo del borde) → la actual. Sombra del tablero opaca (`SHADOW_FLAT`). Velocidad de salida: `EXIT_V0` 5, `EXIT_ACC` 48, `EXIT_VMAX` 30 en `ui/play.gd`.
 
 ## Entrada táctil (ui/play.gd)
 Pulsar resalta la flecha candidata y soltar la activa. El radio de toque (~46 px) se adapta a la casilla y

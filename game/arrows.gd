@@ -44,46 +44,15 @@ static func occupancy(p: Dictionary, removed: Dictionary = {}) -> PackedInt32Arr
 	return occ
 
 
-## Casillas del exterior visible: huecos sin ninguna casilla de tablero en sus 8 vecinas (el
-## margen del dibujo cubre el resto, así que a la vista son tablero) y conectados, a través de
-## otras casillas así, con el borde de la cuadrícula. Los bolsillos interiores NO cuentan.
-## Una flecha que llega a una de estas casillas ya ha salido del tablero.
+## Máscara de huecos (1 = hueco). Un hueco es EXTERIOR al tablero: las formas (game/shapes.gd)
+## lo garantizan, con escalones anchos y planos, sin muescas de una casilla ni agujeros cerrados.
+## Una flecha que llega a un hueco ya ha salido: sale de frente por un lado recto del tablero.
 static func exit_mask(w: int, h: int, holes: Array) -> PackedByteArray:
-	var hole := PackedByteArray()
-	hole.resize(w * h)
+	var m := PackedByteArray()
+	m.resize(w * h)
 	for c in holes:
-		hole[c.y * w + c.x] = 1
-	var vmask := PackedByteArray()
-	vmask.resize(w * h)
-	for y in h:
-		for x in w:
-			if hole[y * w + x] != 1:
-				continue
-			var deep := true
-			for dy in range(-1, 2):
-				for dx in range(-1, 2):
-					var nx := x + dx
-					var ny := y + dy
-					if nx >= 0 and ny >= 0 and nx < w and ny < h and hole[ny * w + nx] != 1:
-						deep = false
-			if deep:
-				vmask[y * w + x] = 1
-	var out := PackedByteArray()
-	out.resize(w * h)
-	var stack := []
-	for y in h:
-		for x in w:
-			if vmask[y * w + x] == 1 and (x == 0 or y == 0 or x == w - 1 or y == h - 1):
-				out[y * w + x] = 1
-				stack.append(Vector2i(x, y))
-	while not stack.is_empty():
-		var c: Vector2i = stack.pop_back()
-		for d in DIRS:
-			var n: Vector2i = c + d
-			if n.x >= 0 and n.y >= 0 and n.x < w and n.y < h and vmask[n.y * w + n.x] == 1 and out[n.y * w + n.x] != 1:
-				out[n.y * w + n.x] = 1
-				stack.append(n)
-	return out
+		m[c.y * w + c.x] = 1
+	return m
 
 
 static func _xm(p: Dictionary) -> PackedByteArray:
@@ -92,9 +61,8 @@ static func _xm(p: Dictionary) -> PackedByteArray:
 	return p["_xm"]
 
 
-## Casillas por las que pasa la cabeza al salir. Termina en el borde de la cuadrícula o al
-## entrar en el exterior visible (ver exit_mask): ahí ya ha salido y no choca con nada más allá.
-## Los huecos estrechos o interiores se cruzan como espacio vacío y lo de detrás sigue bloqueando.
+## Casillas por las que pasa la cabeza al salir. Termina en el borde de la cuadrícula o en el
+## primer hueco: ahí ya ha salido y no puede volver a entrar ni chocar con nada más allá.
 static func exit_path(p: Dictionary, i: int) -> Array:
 	var a: Dictionary = p.arrows[i]
 	var xm := _xm(p)
