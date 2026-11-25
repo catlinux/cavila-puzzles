@@ -10,18 +10,18 @@ niveles con dificultad creciente y estilo "A · Porcelana" (UI clara, flechas az
 
 ## Niveles fijos
 - Niveles 1-1000 **horneados** en `game/levels_baked.bin` (0,9 MB, zstd): `Game.make_level` los lee de ahí, así que son iguales para todos y no cambian aunque se toque el generador. Formato y codificación en `game/baked.gd`. Incluido en el APK vía `include_filter` de `export_presets.cfg`.
-- Al cambiar la regla de huecos se volvieron a hornear los 1000 niveles (cambian respecto a versiones anteriores del APK). Del 1001 en adelante se generan por semilla (deterministas: mismo tablero en todos los móviles). `tests/test_baked.gd` guarda la huella de los niveles 1001, 1500 y 3000: si falla, el generador ha cambiado y esos niveles cambiarían para los jugadores (o es intencionado y hay que hornear más antes).
+- Al cambiar la regla de huecos se volvieron a hornear los 1000 niveles (por tercera vez) (cambian respecto a versiones anteriores del APK). Del 1001 en adelante se generan por semilla (deterministas: mismo tablero en todos los móviles). `tests/test_baked.gd` guarda la huella de los niveles 1001, 1500 y 3000: si falla, el generador ha cambiado y esos niveles cambiarían para los jugadores (o es intencionado y hay que hornear más antes).
 - Regenerar / ampliar: `tools/bake_levels.gd` (`COUNT`). En paralelo: 4 procesos con `-- desde hasta trozo.bin` y luego `-- --merge trozos...` (~1 min en total). **Ojo:** volver a hornear con un generador distinto cambia niveles que la gente ya ha jugado.
 
 ## Reglas ya implementadas
-- Una flecha solo sale por el borde exterior; los huecos se cruzan como vacío y lo de más allá bloquea.
+- Una flecha sale al llegar al borde de la cuadrícula o al entrar en el **exterior visible** (`Arrows.exit_mask`: huecos sin ninguna casilla de tablero en sus 8 vecinas y conectados con el borde). Huecos estrechos y bolsillos interiores se cruzan y lo de detrás bloquea.
 - Las rocas son infranqueables.
 - Tableros hasta 32x50 hacia el nivel ~150, con formas variadas, flechas largas tipo serpiente y niveles tipo laberinto.
 - Categorías de dificultad (respiro, normal, difícil, súper difícil, extra) intercaladas.
 - Zoom y desplazamiento con pellizco; música ambiente con deslizadores; sonidos zen; vibración suave.
 - Esquinas de flecha redondeadas (`CORNER_RADIUS` 0.2 en `ui/play.gd`).
 - Fondo del tablero con margen amplio (0,62 casillas) y esquinas grandes: contorno suave, flechas del borde claramente dentro. Puntos del fondo más marcados (`DOT_COL`).
-- **Los huecos solo dan forma.** Una flecha cruza los huecos como espacio vacío y solo sale por el borde exterior de la cuadrícula; la bloquea cualquier flecha o roca en su línea (`Arrows.exit_path`, generador y solucionador usan la misma definición). Se descartó la regla «un hueco = ya ha salido» (confundía: la pista marcaba libre una flecha que parecía tapada) y los canales grises. Sombra del tablero opaca (`SHADOW_FLAT`) para que no queden rayas en el borde. Velocidad de salida (casillas/s, arranca lenta y sube): `EXIT_V0` 5, `EXIT_ACC` 48, `EXIT_VMAX` 30 en `ui/play.gd` (original: 7 y 75 sin tope; probada demasiado lenta: 4, 26, 16).
+- **Salida = borde o exterior visible.** `exit_mask` marca el exterior: huecos cuyas 8 vecinas son huecos (el margen blanco de 0,62 casillas tapa el resto, así que a la vista son tablero) y conectados con el borde de la cuadrícula. `exit_path`, generador y solucionador usan esa misma definición. Historial: regla «cualquier hueco = salida» (una flecha parecía tapada en una muesca estrecha) → «los huecos se cruzan» (una flecha chocaba tras salir por una muesca grande, nivel 60) → la actual. Sombra del tablero opaca (`SHADOW_FLAT`). Velocidad de salida: `EXIT_V0` 5, `EXIT_ACC` 48, `EXIT_VMAX` 30 en `ui/play.gd`.
 
 ## Entrada táctil (ui/play.gd)
 Pulsar resalta la flecha candidata y soltar la activa. El radio de toque (~46 px) se adapta a la casilla y

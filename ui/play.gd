@@ -26,6 +26,7 @@ var _flash := {}       # flecha -> segundos de destello coral
 var _tracks: Array = []  # recorrido de cada flecha en coordenadas de casilla
 var _boxes: Array = []   # rectángulo que ocupa cada flecha (para descartar rápido al tocar)
 var _exit_len: Array = []
+var _exit_hole: Array = []  # true si la salida termina al entrar en el exterior visible (no en el borde)
 var _particles: Array = []
 var _hint_until := 0.0
 var _shake := 0.0
@@ -217,6 +218,7 @@ func _prepare() -> void:
 	_occ = Arrows.occupancy(puzzle)
 	_tracks.clear()
 	_exit_len.clear()
+	_exit_hole.clear()
 	_boxes.clear()
 	for i in puzzle.arrows.size():
 		var a: Dictionary = puzzle.arrows[i]
@@ -233,11 +235,13 @@ func _prepare() -> void:
 			tr_pts.append(hd + Vector2(a.dir) * k)
 		_tracks.append(tr_pts)
 		_exit_len.append(r)
+		_exit_hole.append(Arrows.inside(puzzle, Arrows.head(a) + a.dir * (r + 1)))
 
 
 ## Cuánto se tarda en desvanecerse una flecha que sale (en casillas de recorrido).
 func _fade_len(i: int) -> float:
-	return float(puzzle.arrows[i].cells.size() + 1)
+	# Al entrar en el exterior visible desaparece enseguida: no debe sobrevolar lo de más allá.
+	return 2.0 if _exit_hole[i] else float(puzzle.arrows[i].cells.size() + 1)
 
 
 func _update_moves() -> void:

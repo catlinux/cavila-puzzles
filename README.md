@@ -22,8 +22,9 @@ se sintetiza por código. Textos en **español** y **catalán**.
   serpentean y llenan todo el tablero. Se generan cubriendo el tablero con caminos largos (regla de
   Warnsdorff) y fijando la punta de cada uno con una simulación inversa de la partida, lo que
   garantiza la solución.
-- **Reglas de salida**: una flecha solo sale por el borde exterior del tablero. Los huecos del contorno
-  son solo forma: se cruzan como espacio vacío y lo que haya al otro lado (otra flecha o una roca)
+- **Reglas de salida**: una flecha sale al llegar al borde de la cuadrícula o al entrar en el exterior
+  visible del tablero (una muesca grande del contorno, conectada con fuera). Los huecos estrechos y los
+  bolsillos interiores no son salida: se cruzan como vacío y lo que haya detrás (otra flecha o una roca)
   sigue bloqueando. Las rocas son infranqueables.
 - **Zoom** pellizcando y desplazamiento arrastrando en los tableros grandes.
 - **Puntuación** por nivel (flechas, dificultad, errores, combos y rapidez) con récord personal, y un

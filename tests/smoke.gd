@@ -208,8 +208,8 @@ func _run() -> void:
 	vt.queue_free()
 	await _frames(1)
 
-	# Los huecos se cruzan: una flecha cuya línea atraviesa un hueco y tiene otra flecha más allá
-	# está bloqueada (choca y pierde una luz); solo se sale por el borde exterior.
+	# Salir al exterior visible (una muesca grande) = salir del tablero: la flecha sale sin perder luz
+	# aunque más allá haya otras flechas, y desaparece enseguida. Los huecos de margen se cruzan.
 	var found_lv := -1
 	var found_i := -1
 	var Levels = load("res://game/levels.gd")
@@ -218,18 +218,16 @@ func _run() -> void:
 		if par.holes.is_empty():
 			continue
 		var pz = Arrows.generate(Levels.seed_for(lv), par)
-		var hs := {}
-		for hc in pz.holes:
-			hs[hc] = true
+		var xm = Arrows.exit_mask(pz.w, pz.h, pz.holes)
 		var oc = Arrows.occupancy(pz)
 		for i in pz.arrows.size():
 			var ar = pz.arrows[i]
 			var cc = Arrows.head(ar) + ar.dir
-			var crossed := false
+			var entered := false
 			while Arrows.inside(pz, cc) and found_i == -1:
-				if hs.has(cc):
-					crossed = true
-				elif crossed and oc[cc.y * pz.w + cc.x] >= 0 and not Arrows.can_exit(pz, i, oc):
+				if xm[cc.y * pz.w + cc.x] == 1:
+					entered = true
+				elif entered and oc[cc.y * pz.w + cc.x] >= 0 and Arrows.can_exit(pz, i, oc):
 					found_lv = lv
 					found_i = i
 				cc += ar.dir
@@ -237,11 +235,14 @@ func _run() -> void:
 				break
 		if found_i != -1:
 			break
-	check(found_i != -1, "hay un nivel con una flecha bloqueada por otra al otro lado de un hueco")
+	check(found_i != -1, "hay un nivel con una flecha que sale al exterior con algo más allá")
 	if found_i != -1:
 		var vh = await _play("level", found_lv)
 		var lives0: int = Game.lives
-		check(vh.tap_arrow(found_i) == "bump" and Game.lives == lives0 - 1, "la flecha choca con lo que hay tras el hueco")
+		check(vh.tap_arrow(found_i) == "exit" and Game.lives == lives0, "la flecha que sale al exterior sale sin chocar")
+		check(vh._exit_hole[found_i], "su animación es de salida al exterior")
+		await get_tree().create_timer(1.5).timeout
+		check(vh._gone.has(found_i), "desaparece enseguida tras salir del tablero")
 		vh.queue_free()
 		await _frames(1)
 

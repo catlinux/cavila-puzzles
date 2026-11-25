@@ -44,14 +44,65 @@ static func occupancy(p: Dictionary, removed: Dictionary = {}) -> PackedInt32Arr
 	return occ
 
 
-## Casillas por las que pasa la cabeza al salir, hasta el borde exterior de la cuadrícula.
-## Los huecos son solo forma del tablero: se cruzan como espacio vacío, y lo que haya al otro
-## lado (flechas, rocas) sigue bloqueando. Solo se sale por el borde exterior.
+## Casillas del exterior visible: huecos sin ninguna casilla de tablero en sus 8 vecinas (el
+## margen del dibujo cubre el resto, así que a la vista son tablero) y conectados, a través de
+## otras casillas así, con el borde de la cuadrícula. Los bolsillos interiores NO cuentan.
+## Una flecha que llega a una de estas casillas ya ha salido del tablero.
+static func exit_mask(w: int, h: int, holes: Array) -> PackedByteArray:
+	var hole := PackedByteArray()
+	hole.resize(w * h)
+	for c in holes:
+		hole[c.y * w + c.x] = 1
+	var vmask := PackedByteArray()
+	vmask.resize(w * h)
+	for y in h:
+		for x in w:
+			if hole[y * w + x] != 1:
+				continue
+			var deep := true
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					var nx := x + dx
+					var ny := y + dy
+					if nx >= 0 and ny >= 0 and nx < w and ny < h and hole[ny * w + nx] != 1:
+						deep = false
+			if deep:
+				vmask[y * w + x] = 1
+	var out := PackedByteArray()
+	out.resize(w * h)
+	var stack := []
+	for y in h:
+		for x in w:
+			if vmask[y * w + x] == 1 and (x == 0 or y == 0 or x == w - 1 or y == h - 1):
+				out[y * w + x] = 1
+				stack.append(Vector2i(x, y))
+	while not stack.is_empty():
+		var c: Vector2i = stack.pop_back()
+		for d in DIRS:
+			var n: Vector2i = c + d
+			if n.x >= 0 and n.y >= 0 and n.x < w and n.y < h and vmask[n.y * w + n.x] == 1 and out[n.y * w + n.x] != 1:
+				out[n.y * w + n.x] = 1
+				stack.append(n)
+	return out
+
+
+static func _xm(p: Dictionary) -> PackedByteArray:
+	if not p.has("_xm"):
+		p["_xm"] = exit_mask(p.w, p.h, p.get("holes", []))
+	return p["_xm"]
+
+
+## Casillas por las que pasa la cabeza al salir. Termina en el borde de la cuadrícula o al
+## entrar en el exterior visible (ver exit_mask): ahí ya ha salido y no choca con nada más allá.
+## Los huecos estrechos o interiores se cruzan como espacio vacío y lo de detrás sigue bloqueando.
 static func exit_path(p: Dictionary, i: int) -> Array:
 	var a: Dictionary = p.arrows[i]
+	var xm := _xm(p)
 	var out := []
 	var c: Vector2i = head(a) + a.dir
 	while inside(p, c):
+		if xm[c.y * p.w + c.x] == 1:
+			break
 		out.append(c)
 		c += a.dir
 	return out
@@ -211,6 +262,7 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 	#   hot      casilla -> nº de flechas libres cuyo camino pasa por ella
 	var st := {"w": w, "h": h, "occ": PackedInt32Array(), "rays_at": [], "waits": [], "free": {},
 		"hot": PackedInt32Array(), "ray_cells": []}
+	st["xm"] = exit_mask(w, h, p.holes)
 	st.occ.resize(w * h)
 	st.occ.fill(-1)
 	for c in p.holes:
@@ -278,6 +330,8 @@ static func _build(rng: RandomNumberGenerator, params: Dictionary) -> Dictionary
 				var c: Vector2i = hd + d
 				var blocked := false
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+					if st.xm[c.y * w + c.x] == 1:
+						break  # exterior visible: ya ha salido
 					var o: int = st.occ[c.y * w + c.x]
 					if o == ROCK:
 						blocked = true
@@ -315,6 +369,8 @@ static func _dir_ok(st: Dictionary, hd: Vector2i, d: Vector2i) -> bool:
 		return false
 	var c: Vector2i = hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+		if st.xm[c.y * w + c.x] == 1:
+			break
 		var o: int = st.occ[c.y * w + c.x]
 		if o == ROCK:
 			return false
@@ -342,6 +398,8 @@ static func _ray_cells(st: Dictionary, hd: Vector2i, d: Vector2i) -> Array:
 	var out := []
 	var c := hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < st.h:
+		if st.xm[c.y * w + c.x] == 1:
+			break
 		out.append(c.y * w + c.x)
 		c += d
 	return out
@@ -426,6 +484,8 @@ static func _grow(rng: RandomNumberGenerator, st: Dictionary, hd: Vector2i, d: V
 	var ray := {}
 	var c := hd + d
 	while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
+		if st.xm[c.y * w + c.x] == 1:
+			break
 		ray[c] = true
 		c += d
 	var b := hd - d
@@ -571,6 +631,7 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 	blocked.resize(w * h)
 	for c in p.holes:
 		blocked[c.y * w + c.x] = 1
+	var xm := exit_mask(w, h, p.holes)
 	var rock := PackedByteArray()
 	rock.resize(w * h)
 	for c in p.rocks:
@@ -608,6 +669,8 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 				var deps := {}
 				while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 					var k := c.y * w + c.x
+					if xm[k] == 1:
+						break  # exterior visible: ya ha salido
 					if occ[k] != -1 or rock[k] == 1:
 						ok = false
 						break
@@ -638,6 +701,8 @@ static func _maze_build(rng: RandomNumberGenerator, params: Dictionary) -> Dicti
 						var ok := true
 						while c.x >= 0 and c.y >= 0 and c.x < w and c.y < h:
 							var kk := c.y * w + c.x
+							if xm[kk] == 1:
+								break
 							if occ[kk] != -1 or rock[kk] == 1:
 								ok = false
 								break

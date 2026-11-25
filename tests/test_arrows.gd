@@ -106,6 +106,27 @@ func run() -> void:
 	var clear_p := reent.duplicate(true)
 	clear_p.arrows.pop_back()
 	check(Arrows.blocker(clear_p, 0, Arrows.occupancy(clear_p)).by == -1, "sin nada más allá, A sale por el borde")
+	# Muesca exterior grande: la flecha que entra en el vacío visible ya ha salido y no choca con lo
+	# de más allá. Tablero en U de 9x5: brazos en columnas 0-2 y 6-8, muesca de columnas 3-5 abierta
+	# por arriba (filas 0-3). A (izquierda) apunta a la derecha; B (derecha) está al otro lado.
+	var notch_holes := []
+	for y in 4:
+		for x in range(3, 6):
+			notch_holes.append(Vector2i(x, y))
+	var notch := {"w": 9, "h": 5, "rocks": [], "holes": notch_holes, "arrows": [
+		_arrow([Vector2i(1, 1), Vector2i(2, 1)]),
+		_arrow([Vector2i(6, 1), Vector2i(7, 1)])]}
+	check(Arrows.validate(notch).ok, "tablero en U válido")
+	var nm := Arrows.exit_mask(9, 5, notch_holes)
+	check(nm[1 * 9 + 4] == 1 and nm[1 * 9 + 3] == 0 and nm[3 * 9 + 4] == 0, "solo el centro de la muesca es exterior (el resto es margen)")
+	check(Arrows.exit_path(notch, 0).size() == 1, "la salida termina al entrar en el exterior (1 casilla de margen)")
+	check(Arrows.blocker(notch, 0, Arrows.occupancy(notch)).by == -1, "A sale: lo de más allá de la muesca no cuenta")
+	# Un bolsillo interior (sin conexión con el exterior) no es salida, aunque sea grande.
+	var pocket_holes := []
+	for y in range(1, 4):
+		for x in range(3, 6):
+			pocket_holes.append(Vector2i(x, y))
+	check(Arrows.exit_mask(9, 5, pocket_holes).count(1) == 0, "un bolsillo interior no es exterior")
 	# Propiedad sobre niveles reales con huecos: toda salida llega hasta el borde exterior
 	# y solo la bloquea lo que haya en su línea.
 	var wh_levels := 0
@@ -119,6 +140,7 @@ func run() -> void:
 		if g3.is_empty():
 			continue
 		wh_levels += 1
+		var xm3 := Arrows.exit_mask(g3.w, g3.h, g3.holes)
 		var holes3 := {}
 		for c in g3.holes:
 			holes3[c] = true
@@ -129,6 +151,8 @@ func run() -> void:
 			var cc: Vector2i = Arrows.head(a3) + a3.dir
 			var crossed := false
 			while Arrows.inside(g3, cc):
+				if xm3[cc.y * g3.w + cc.x] == 1:
+					break
 				raw.append(cc)
 				if holes3.has(cc):
 					crossed = true
@@ -145,7 +169,7 @@ func run() -> void:
 				wh_cross += 1
 		check(Arrows.solve(g3).solvable and Arrows.validate(g3).ok, "nivel %d con huecos: válido y resoluble" % lv)
 	check(wh_levels >= 20, "se han revisado niveles con huecos (%d)" % wh_levels)
-	check(wh_bad == 0, "la salida llega siempre al borde exterior (%d fallos, %d salidas cruzan huecos)" % [wh_bad, wh_cross])
+	check(wh_bad == 0, "la salida llega al borde o al exterior visible (%d fallos, %d salidas cruzan huecos de margen)" % [wh_bad, wh_cross])
 
 	# Formas y obstáculos.
 	var rock_p := {"w": 5, "h": 3, "rocks": [Vector2i(4, 1)], "holes": [Vector2i(0, 0)], "arrows": [_arrow([Vector2i(1, 1), Vector2i(2, 1)])]}
