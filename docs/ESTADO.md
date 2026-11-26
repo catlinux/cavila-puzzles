@@ -49,10 +49,26 @@ el porcentaje de aciertos (la simulación se colgaba): sigue pendiente; validar 
 - Sin usar aún: `stars`, `progress`.
 - Descartadas por texto deformado o "$": laurel original, moneda "100%", cofre "$".
 
+## Próximos pasos (plan acordado el 2026-11-26)
+Orden recomendado (detalle y fuentes en `docs/IDEAS.md`):
+1. **Compartir resultado del reto diario** (texto con estrellas y tiempo al portapapeles, estilo Wordle).
+2. **Misiones diarias** (3 objetivos pequeños con pista de premio) + **escudo de racha** que se gana jugando.
+3. **Coleccionables** (estilos de pieza y temas de tablero desbloqueables, insignias de liga) cuando haya arte.
+4. **Reta a un amigo** (compartir nivel y tiempo; niveles fijos, sin servidor) y **calendario mensual** del reto diario.
+5. Modos extra (contrarreloj, sin pistas), eventos semanales temáticos y logros.
+- **No hacer**: anuncios obligatorios, vidas que se recargan por horas, muros de pago, notificaciones insistentes.
+- Aún **sin empezar**: el usuario debe elegir por cuál se empieza (propuesta: 1 y 2).
+
+## Ligas con usuarios reales: pendiente de decidir
+Todo en `docs/LIGAS_ONLINE.md`. Decidido: solo Android; mezcla de reales y simulados con tope de 30 por grupo; apodo automático
+cambiable con filtro. Pendiente: (a) edades: propuesta de ranking real solo para mayores de 14 con pantalla de edad neutra;
+(b) servidor: el usuario pregunta si puede ser su **VPS** (viable con API propia + PostgreSQL + Caddy; faltan RAM/CPU/disco,
+sistema, país, dominio y otros servicios del VPS); (c) después, interfaz `LeagueSource` (simulada/remota) sin servidor.
+
 ## Otros pendientes
 - Crear `main` y abrir el PR cuando el usuario lo pida.
-- Servidor para ligas reales.
 - Arte aún por generar: ver `docs/arte-prompts.md` (icono, insignias de división, mundos, logros...).
+- Probar los toques con el dedo en el móvil (`FINGER_PX`, `FAIR_PX`); nunca se midió el acierto.
 
 ## Tests y compilación
 - Lógica: `godot --headless --path . --script tests/run_tests.gd`.
