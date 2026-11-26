@@ -36,6 +36,8 @@ var _settings: Control
 var _path: Control
 var _clock := 0.0
 var _league_cards: Array = []
+var _exit_btn: Control
+var _exit_layer: Control
 var _tick := 0.0
 
 
@@ -47,11 +49,11 @@ func _ready() -> void:
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 34)
 	margin.add_theme_constant_override("margin_right", 34)
-	margin.add_theme_constant_override("margin_top", 84)
-	margin.add_theme_constant_override("margin_bottom", 40)
+	margin.add_theme_constant_override("margin_top", 60)
+	margin.add_theme_constant_override("margin_bottom", 24)
 	add_child(margin)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 28)
+	vb.add_theme_constant_override("separation", 18)
 	margin.add_child(vb)
 
 	# Cabecera.
@@ -158,13 +160,23 @@ func _ready() -> void:
 	# Reto diario: franja compacta.
 	var key := Daily.today_key()
 	var daily := Control.new()
-	daily.custom_minimum_size = Vector2(0, 150)
+	daily.custom_minimum_size = Vector2(0, 132)
 	daily.mouse_filter = Control.MOUSE_FILTER_STOP
 	daily.draw.connect(_draw_daily_strip.bind(daily, key))
 	daily.gui_input.connect(func(ev):
 		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
 			Game.start_daily())
 	vb.add_child(daily)
+
+	# Botón de salir, grande y con la palabra escrita: abajo del todo, fácil de encontrar.
+	var gap := Control.new()
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vb.add_child(gap)
+	_exit_btn = PillButton.new(tr("EXIT"), false, 96.0)
+	_exit_btn.icon_name = "x-bold"
+	_exit_btn.font_size = 46
+	_exit_btn.pressed.connect(_confirm_exit)
+	vb.add_child(_exit_btn)
 	Style.fade_in(self)
 	_show_league_results()
 
@@ -236,11 +248,54 @@ func _process(delta: float) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if _settings:
+		if _exit_layer:
+			_exit_layer.queue_free()
+			_exit_layer = null
+		elif _settings:
 			_settings.queue_free()
 			_settings = null
 		else:
-			get_tree().quit()
+			_confirm_exit()  # el gesto de «atrás» también pregunta antes de salir
+
+
+## Pregunta antes de cerrar el juego. La opción cómoda («Seguir jugando») es la grande.
+func _confirm_exit() -> void:
+	if _exit_layer:
+		return
+	_exit_layer = Control.new()
+	_exit_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_exit_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_exit_layer)
+	var dim := ColorRect.new()
+	dim.color = Color(Style.INK, 0.4)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_exit_layer.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_exit_layer.add_child(center)
+	var panel := Style.card(56, 44)
+	center.add_child(panel)
+	var vb := VBoxContainer.new()
+	vb.custom_minimum_size = Vector2(580, 0)
+	vb.add_theme_constant_override("separation", 24)
+	panel.add_child(vb)
+	vb.add_child(Style.label(tr("EXIT_TITLE"), 56, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
+	var txt := Style.label(tr("EXIT_TEXT"), 32, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER)
+	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	txt.custom_minimum_size = Vector2(540, 0)
+	vb.add_child(txt)
+	var stay := PillButton.new(tr("EXIT_STAY"), true, 124.0)
+	stay.font_size = 48
+	stay.set_colors(world.a, world.b)
+	stay.pressed.connect(func():
+		_exit_layer.queue_free()
+		_exit_layer = null)
+	vb.add_child(stay)
+	var leave := PillButton.new(tr("EXIT_YES"), false, 100.0)
+	leave.font_size = 44
+	leave.pressed.connect(func(): get_tree().quit())
+	vb.add_child(leave)
+	Style.fade_in(_exit_layer, 0.15)
 
 
 func _open_settings() -> void:

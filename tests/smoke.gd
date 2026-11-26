@@ -113,6 +113,15 @@ func _run() -> void:
 	Progress.now_override = Progress.now() + 9 * 86400
 	var h2 = await _spawn("res://ui/home.tscn")
 	check(Progress.pending_league_results().size() <= 2, "al abrir el inicio se cobra un resultado de liga")
+	# Botón de salir en la portada: visible, grande, con texto, y pregunta antes de cerrar.
+	check(h2._exit_btn != null and h2._exit_btn.visible and h2._exit_btn.custom_minimum_size.y >= 90.0, "la portada tiene un botón de salir grande")
+	check(h2._exit_btn.text != "", "el botón de salir lleva la palabra escrita")
+	h2._confirm_exit()
+	await _frames(2)
+	check(h2._exit_layer != null and h2._exit_layer.visible, "salir pide confirmación")
+	h2.notification(NOTIFICATION_WM_GO_BACK_REQUEST)
+	await _frames(2)
+	check(h2._exit_layer == null, "«atrás» cierra la pregunta sin salir del juego")
 	h2.queue_free()
 	await _frames(1)
 	Progress.now_override = -1
@@ -291,6 +300,12 @@ func _run() -> void:
 			if d0 or d1:
 				det_bad += 1
 				det_info = "rep %d: nivel %d distinto=%s (%d vs %d flechas), nivel %d distinto=%s (%d vs %d)" % [rep, base, d0, mine.arrows.size(), solo0.arrows.size(), base + 1, d1, pre1.arrows.size(), solo1.arrows.size()]
+				for dpair in [[mine, solo0], [pre1, solo1]]:
+					for ai in mini(dpair[0].arrows.size(), dpair[1].arrows.size()):
+						if var_to_str(dpair[0].arrows[ai]) != var_to_str(dpair[1].arrows[ai]):
+							det_info += " | primera flecha distinta #%d: %s contra %s" % [ai, str(dpair[0].arrows[ai]), str(dpair[1].arrows[ai])]
+							break
+				print("DIAG ", det_info)
 		check(det_bad == 0, "los niveles %d y %d son idénticos con y sin precarga solapada (%d de 12 distintos) %s" % [base, base + 1, det_bad, det_info])
 
 	# Choques: tocar flechas bloqueadas resta luces y al tercer choque se pierde.

@@ -54,6 +54,7 @@ el porcentaje de aciertos (la simulación se colgaba): sigue pendiente; validar 
 - Descartadas por texto deformado o "$": laurel original, moneda "100%", cofre "$".
 
 ## Próximos pasos (actualizado 2026-11-26)
+- **Botón «Salir»** (2026-11-26): grande, con la palabra, abajo del todo en la portada (`ui/home.gd`); pregunta antes de cerrar («Seguir jugando» es el botón grande) y el gesto de «atrás» en la portada también pregunta. Pensado para una persona mayor que no conoce el gesto de atrás.
 - **Arreglo importante (2026-11-26)**: `Progress._migrate_scores` no guardaba y se repetía en cada arranque, poniendo `league_floor` a «ahora» (rivales a 0 al abrir la app). Ahora guarda; hay test que abre la app varias veces sin jugar.
 - **Hecho**: racha de **días jugados** (`Progress.note_played` / `play_streak`, chip de llama en la portada; se cuenta al superar un nivel o el reto diario). Rivales de las ligas siempre activos (cada rival tiene su huso `SHIFTS`, hora local del jugador).
 - **Por discutir** (`docs/VIDAS_Y_PISTAS.md`): sistema de **vidas** globales (5, +1 cada 30 min, +1 cada 10 niveles), recuperación de **pistas**, premios de racha y **misiones diarias** con premios (p. ej. vidas ilimitadas 30/60 min).
