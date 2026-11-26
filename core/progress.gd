@@ -149,13 +149,25 @@ func tz_bias() -> int:
 	return int(Time.get_time_zone_from_system().get("bias", 0))
 
 
-## Liga en curso de un tipo, creada (y calibrada con el nivel actual) si no existía.
+## Liga en curso de un tipo, creada si no existía. La diaria y la flash comparten con la semanal
+## la calibración, la división y la zona horaria: sus rivales son los mismos de la semana.
 func league(type: String) -> Dictionary:
 	var inst := Leagues.instance(type, now(), tz_bias())
 	var all: Dictionary = data["leagues"]
 	if not all.has(inst.key):
+		var calib := 0.0
+		var division := 0
+		var bias := tz_bias()
+		if type == "weekly":
+			calib = Leagues.points_per_level(current_level())
+			division = int(data["division"])
+		else:
+			var wk := league("weekly")
+			calib = float(wk.calib)
+			division = int(wk.division)
+			bias = int(wk.get("bias", bias))
 		all[inst.key] = {"type": type, "start": inst.start, "end": inst.end, "points": 0,
-			"calib": Leagues.points_per_level(current_level()), "division": int(data["division"]), "claimed": false}
+			"calib": calib, "division": division, "bias": bias, "claimed": false}
 	return all[inst.key]
 
 
@@ -168,7 +180,8 @@ func add_league_points(points: int) -> void:
 
 
 func league_standings(lg: Dictionary, at: int = -1) -> Array:
-	var inst := {"key": "%s:%d" % [lg.type, int(lg.start)], "type": lg.type, "start": int(lg.start), "end": int(lg.end)}
+	var inst := {"key": "%s:%d" % [lg.type, int(lg.start)], "type": lg.type, "start": int(lg.start), "end": int(lg.end),
+		"bias": int(lg.get("bias", tz_bias()))}
 	return Leagues.standings(inst, float(lg.calib), int(lg.division), int(lg.points), now() if at < 0 else at, tr("YOU"))
 
 

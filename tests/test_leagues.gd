@@ -117,6 +117,47 @@ func run() -> void:
 	var first := [{"name": "Tú", "points": 900, "you": true}, {"name": "A", "points": 500, "you": false}]
 	check(Leagues.notice(first, []).key == "LG_LEAD" and Leagues.notice(first, []).args == [400], "aviso: vas primero")
 
+	# Coherencia entre ligas: cada rival es la misma persona en la flash, la diaria y la semanal de
+	# su semana, y nunca tiene más puntos en la corta que en la larga que la contiene.
+	var wk_n := Leagues.instance("weekly", now)
+	var dl_n := Leagues.instance("daily", now)
+	var fl_n := Leagues.instance("flash", now)
+	var wk_b := {}
+	for b in Leagues.bots(wk_n, calib):
+		wk_b[b.name] = b
+	var in_week := 0
+	var nested_bad := 0
+	var zero_bad := 0
+	for lg_pair in [[dl_n, wk_n], [fl_n, wk_n], [fl_n, dl_n]]:
+		var short: Dictionary = lg_pair[0]
+		var long: Dictionary = lg_pair[1]
+		var long_b := {}
+		for b in Leagues.bots(long, calib):
+			long_b[b.name] = b
+		for b in Leagues.bots(short, calib):
+			if not long_b.has(b.name):
+				if long.type == "weekly":
+					nested_bad += 1  # un rival de la diaria/flash debe estar en la semanal
+				continue
+			in_week += 1
+			for step in range(0, int(short.end - short.start) + 1, 600):
+				var t: int = short.start + step
+				var ps := Leagues.bot_points(b, short, t)
+				var pl := Leagues.bot_points(long_b[b.name], long, t)
+				if ps > pl:
+					nested_bad += 1
+				if ps > 0 and pl == 0:
+					zero_bad += 1
+	check(in_week > 10, "hay rivales comunes entre ligas (%d)" % in_week)
+	check(nested_bad == 0, "los rivales de la diaria y la flash están en la semanal y nunca tienen más puntos en la corta (%d fallos)" % nested_bad)
+	check(zero_bad == 0, "nadie tiene puntos en la diaria o la flash y cero en la semanal (%d fallos)" % zero_bad)
+	check(Leagues.bots(fl_n, calib).size() == Leagues.CONFIG.flash.size - 1 and Leagues.bots(dl_n, calib).size() == Leagues.CONFIG.daily.size - 1, "tamaño de las ligas corta y diaria")
+	var act_fl := 0
+	for b in Leagues.bots(fl_n, calib):
+		if Leagues.bot_points(b, fl_n, fl_n.end) > 0:
+			act_fl += 1
+	check(act_fl >= 5, "la liga flash tiene actividad (%d rivales con puntos)" % act_fl)
+
 	# Progreso: puntos en todas las ligas, resultados y ascensos.
 	var path := "user://test_leagues.json"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
@@ -126,6 +167,9 @@ func run() -> void:
 	pr.now_override = now
 	pr.complete_level(1, 3, 1000000)
 	check(int(pr.league("flash").points) == 1000000 and int(pr.league("weekly").points) == 1000000, "los puntos suman en todas las ligas")
+	check(float(pr.league("flash").calib) == float(pr.league("weekly").calib) and float(pr.league("daily").calib) == float(pr.league("weekly").calib), "las tres ligas comparten calibración")
+	# Puntos del jugador: la semanal siempre tiene al menos los de la diaria y la flash.
+	check(int(pr.league("weekly").points) >= int(pr.league("daily").points) and int(pr.league("daily").points) >= int(pr.league("flash").points), "el jugador: semanal >= diaria >= flash")
 	check(pr.pending_league_results().is_empty(), "sin resultados mientras están en curso")
 	pr.now_override = now + 8 * 86400  # han terminado las tres
 	var pend: Array = pr.pending_league_results()

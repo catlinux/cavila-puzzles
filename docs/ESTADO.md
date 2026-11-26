@@ -38,10 +38,9 @@ el porcentaje de aciertos (la simulación se colgaba): sigue pendiente; validar 
 - Aviso «rivales simulados» ya visible en la pantalla de ligas; si se pasa a rivales reales, quitarlo.
 
 ### Credibilidad de las ligas (hecho)
-Actividad por hora (más tarde y noche), habilidad con cola larga, puntos a saltos por nivel completado,
-14 rivales habituales que reaparecen entre ligas (`Leagues.regulars()`), rivales más fuertes en divisiones
-altas (+18 % por división), avisos «X te ha adelantado» / «a N puntos del puesto K» (`Leagues.notice`,
-sticky 30 s en `ui/leagues.gd`) y nota «Los rivales son simulados». Todo con tests en `tests/test_leagues.gd`.
+- **Coherencia entre ligas**: cada rival es una persona única por semana (`Leagues.week_bots`), con una sola agenda de partidas; sus puntos en cualquier liga son lo ganado dentro de su ventana (`bot_points`). Flash y diaria son subgrupos de la semanal (`Leagues.bots`, con preferencia por los que juegan en la ventana). Por eso semanal >= diaria >= flash para la misma persona. La diaria y la flash comparten calibración, división y zona horaria con la semanal del jugador (`Progress.league`).
+- Actividad por hora (más tarde y noche), habilidad con cola larga, puntos a saltos por nivel, 14 rivales habituales que reaparecen entre semanas, rivales más fuertes en divisiones altas (+18 % por división), avisos «X te ha adelantado» / «a N puntos del puesto K» (`Leagues.notice`) y nota «Los rivales son simulados». Tests en `tests/test_leagues.gd`.
+- **Ligas con usuarios reales**: propuesta en `docs/LIGAS_ONLINE.md` (sin implementar; hay decisiones del usuario al final).
 
 ## Imágenes de premios
 - `assets/rewards/`: `arch` (último nivel de un mundo), `laurel` (niveles súper/extra), `rise` (ascenso de división) ya se usan.
