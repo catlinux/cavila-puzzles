@@ -193,9 +193,11 @@ static func rival_time(arrows: int, depth: int, seed_value: int) -> float:
 	return (arrows * 1.3 + depth * 0.9 + 6.0) * rng.randf_range(0.9, 1.15)
 
 
-## Puntos: flechas y vidas (multiplicados por la dificultad), combos y rapidez frente al rival.
+## Puntos de un nivel: una por flecha y 5 por vida que te queda, más los combos (décima parte),
+## todo multiplicado por la dificultad (x1 a x3), y un extra por rapidez frente al rival.
+## Un nivel normal da entre 30 y 250 puntos.
 static func score(arrows: int, t: float, elapsed: float, lives: int, combo_points: int, rival: float) -> int:
 	var mult := 1.0 + 2.0 * t
-	var base := arrows * 10 + lives * 100 + combo_points
-	var time_bonus := maxf(0.0, rival - elapsed) * 4.0
+	var base := arrows + lives * 5 + combo_points / 10.0
+	var time_bonus := maxf(0.0, rival - elapsed) * 0.4
 	return int(round(base * mult + time_bonus))

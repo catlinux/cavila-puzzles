@@ -14,13 +14,14 @@ func _ready() -> void:
 	get_window().size = Vector2i(720, 1280)
 	Progress.save_path = "user://shots_save.json"
 	Progress.reset()
+	Progress.data["league_floor"] = 0  # los rivales ya llevan partidas (como una instalación normal)
 	Progress.set_setting("sound", false)
 	for n in range(1, 81):
 		Progress.complete_level(n, [3, 2, 3, 1, 3][n % 5])
 	Progress.complete_daily("2026-11-22")
 	for n in range(1, 81):
 		Progress.data["scores"][str(n)] = 800 + n * 37
-	Progress.add_league_points(14250)
+	Progress.add_league_points(1800)
 	Game.selected_league = "daily"
 	await _shot("res://ui/leagues.tscn", out + "/ligas.png", 0.5)
 	Game.selected_league = "weekly"

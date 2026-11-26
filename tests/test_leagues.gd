@@ -158,6 +158,27 @@ func run() -> void:
 			act_fl += 1
 	check(act_fl >= 5, "la liga flash tiene actividad (%d rivales con puntos)" % act_fl)
 
+	# Puntuación: escala moderada y competitiva.
+	var pts55 := Leagues.points_per_level(55)
+	check(pts55 > 60.0 and pts55 < 600.0 and Leagues.points_per_level(5) < pts55, "un nivel da cientos de puntos, no miles (%d)" % int(pts55))
+	var pace55 := Leagues.pace_per_level(55)
+	var mid := now - 3 * 86400 + 5 * 3600 + 5400  # a mitad de jornada, tres días antes
+	var ranks_ok := true
+	for ty in ["daily", "weekly"]:
+		var rows_mid := Leagues.standings(Leagues.instance(ty, mid), pts55, 0, int(4 * pts55), mid, "Tú", pace55)
+		if Leagues.rank_of_you(rows_mid) <= 3:
+			ranks_ok = false
+	check(ranks_ok, "con 4 niveles a mitad de jornada no estás en el podio de la diaria ni la semanal")
+	var wk_lead: int = Leagues.standings(Leagues.instance("weekly", now + 2 * 86400), pts55, 0, 0, now + 2 * 86400, "Tú", pace55)[0].points
+	check(wk_lead > 10.0 * pts55 and wk_lead < 400.0 * pts55, "el líder semanal ha jugado decenas de niveles, no cientos de miles de puntos (%d)" % wk_lead)
+	# Reiniciar ligas: los rivales también empiezan de cero desde ese momento.
+	var fl_i := Leagues.instance("weekly", now + 3 * 86400)
+	fl_i["floor"] = now + 3 * 86400
+	var before_lead: int = Leagues.standings(Leagues.instance("weekly", now + 3 * 86400), pts55, 0, 0, now + 3 * 86400, "Tú", pace55)[0].points
+	var after_lead: int = Leagues.standings(fl_i, pts55, 0, 0, now + 3 * 86400, "Tú", pace55)[0].points
+	var later_lead: int = Leagues.standings(fl_i, pts55, 0, 0, now + 3 * 86400 + 6 * 3600, "Tú", pace55)[0].points
+	check(before_lead > 0 and after_lead == 0 and later_lead > 0, "tras reiniciar, los rivales parten de cero y luego suben (%d, %d, %d)" % [before_lead, after_lead, later_lead])
+
 	# Progreso: puntos en todas las ligas, resultados y ascensos.
 	var path := "user://test_leagues.json"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
@@ -183,6 +204,19 @@ func run() -> void:
 	check(pr.hints() == mini(hints0 + 3 + 4 + 8, ProgressScript.MAX_HINTS), "premios cobrados sin pasar del máximo (%d)" % pr.hints())
 	check(promoted == 1 and int(pr.data.division) == 1, "asciende de división")
 	check(pr.pending_league_results().is_empty() and pr.claim_league(pend[0].key) == 0, "no se cobra dos veces")
+	# Partidas guardadas con la escala antigua: los récords se dividen por 15 y las ligas viejas se descartan.
+	var old_path := "user://test_old_scores.json"
+	var f := FileAccess.open(old_path, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"version": 2, "level": 12, "stars": {"1": 3}, "scores": {"1": 1500, "2": 3000}, "hints": 3,
+		"leagues": {"flash:1": {"type": "flash", "points": 99999}}, "division": 2}))
+	f.close()
+	var pold = ProgressScript.new()
+	pold.save_path = old_path
+	pold.now_override = now
+	pold.load_data()
+	check(pold.best_score(1) == 100 and pold.best_score(2) == 200 and pold.data["leagues"].is_empty() and int(pold.data["league_floor"]) == now, "partida antigua: récords a la escala nueva y ligas descartadas")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(old_path))
+	pold.free()
 	# Reiniciar ligas: borra puntos y división, pero no niveles ni estrellas.
 	pr.complete_level(2, 3, 500)
 	pr.data["division"] = 3

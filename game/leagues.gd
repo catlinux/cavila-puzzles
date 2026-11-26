@@ -69,6 +69,13 @@ static func points_per_level(level: int) -> float:
 	return float(Levels.score(arrows, t, rival * 0.85, 2, 40, rival))
 
 
+## Segundos que tarda en superar un nivel típico un jugador de nivel `level` (el tiempo del rival).
+static func pace_per_level(level: int) -> float:
+	var t := Levels.difficulty(maxi(level, 1))
+	var arrows := int(lerpf(12.0, 140.0, t))
+	return Levels.rival_time(arrows, int(lerpf(4.0, 55.0, t)), 0)
+
+
 ## Actividad relativa por hora local (0-23): poca de madrugada, mucha por la tarde y la noche.
 const ACTIVITY := [0.30, 0.15, 0.08, 0.05, 0.05, 0.08, 0.20, 0.40, 0.55, 0.60, 0.60, 0.70,
 	0.85, 0.90, 0.75, 0.70, 0.80, 0.95, 1.00, 1.00, 1.00, 0.95, 0.75, 0.50]
@@ -169,7 +176,7 @@ static func week_of(inst: Dictionary) -> Dictionary:
 ## ha ganado dentro de la ventana de esa liga. Por eso nunca tiene más puntos en la diaria que en
 ## la semanal, ni puntos en una y cero en la otra. Las sesiones son [inicio, duración] en segundos
 ## desde el inicio de la semana.
-static func week_bots(week: Dictionary, calib: float, division: int = 0) -> Array:
+static func week_bots(week: Dictionary, calib: float, division: int = 0, pace: float = 60.0) -> Array:
 	var n: int = int(CONFIG.weekly.size) - 1
 	var rng := Rng.make(Rng.hash_string("liga:" + week.key))
 	var ids := identities(week.key, n)
@@ -178,13 +185,17 @@ static func week_bots(week: Dictionary, calib: float, division: int = 0) -> Arra
 	for k in n:
 		var skill: float = float(ids[k].skill) if ids[k].has("skill") else _skill(rng)
 		skill *= 1.0 + 0.18 * division  # en divisiones altas se juega más fuerte
-		var lvl_per_hour := rng.randf_range(5.0, 13.0)
-		var per_level := calib * skill * rng.randf_range(0.9, 1.1)
+		# Ritmo real: lo que tarda un buen jugador en un nivel de este nivel de dificultad, dividido
+		# por su habilidad, más unos segundos entre niveles. Los hábiles puntúan algo más por nivel
+		# (rapidez y menos errores), pero ganan sobre todo jugando más niveles.
+		var secs_per_level := pace / maxf(skill, 0.4) + 12.0
+		var lvl_per_hour := 3600.0 / secs_per_level
+		var per_level := calib * (0.8 + 0.2 * skill) * rng.randf_range(0.9, 1.1)
 		var sessions := []
 		if rng.randf() > 0.06:  # unos pocos se apuntan y no juegan en toda la semana
-			var count := 14 + rng.randi() % 20
+			var count := 10 + rng.randi() % 15
 			for _s in count:
-				var len_s := rng.randf_range(5.0, 25.0) * 60.0
+				var len_s := rng.randf_range(5.0, 20.0) * 60.0
 				sessions.append([_session_start(rng, week, dur, len_s), len_s])
 		out.append({"name": ids[k].name, "avatar": ids[k].avatar, "per_level": per_level,
 			"lph": lvl_per_hour / 3600.0, "rate": per_level * lvl_per_hour / 3600.0, "sessions": sessions,
@@ -195,9 +206,9 @@ static func week_bots(week: Dictionary, calib: float, division: int = 0) -> Arra
 ## Participantes simulados de una liga (sin contar al jugador). La semanal son los 29 de la semana;
 ## la diaria y la flash son subgrupos de esos mismos, con preferencia por los que juegan en su
 ## ventana (así hay actividad) y, si faltan, se completan con otros.
-static func bots(inst: Dictionary, calib: float, division: int = 0) -> Array:
+static func bots(inst: Dictionary, calib: float, division: int = 0, pace: float = 60.0) -> Array:
 	var week := week_of(inst)
-	var all := week_bots(week, calib, division)
+	var all := week_bots(week, calib, division, pace)
 	if inst.type == "weekly":
 		return all
 	var want: int = int(CONFIG[inst.type].size) - 1
@@ -239,17 +250,20 @@ static func _cum(bot: Dictionary, t: float) -> int:
 
 
 ## Puntos de un participante simulado en la liga `inst` en el instante `now`: lo ganado dentro
-## de la ventana de esa liga.
+## de la ventana de esa liga. Si el jugador reinició las ligas (`inst.floor`), solo cuenta lo
+## ganado desde ese momento: todos vuelven a empezar de cero.
 static func bot_points(bot: Dictionary, inst: Dictionary, now: int) -> int:
 	var t1 := float(mini(now, int(inst.end)) - int(bot.week_start))
-	var t0 := float(int(inst.start) - int(bot.week_start))
+	var t0 := float(maxi(int(inst.start), int(inst.get("floor", 0))) - int(bot.week_start))
+	if t1 <= t0:
+		return 0
 	return _cum(bot, t1) - (_cum(bot, t0) if t0 > 0.0 else 0)
 
 
 ## Clasificación: [{name, points, avatar (-1 = tú), you}] ordenada de mayor a menor.
-static func standings(inst: Dictionary, calib: float, division: int, your_points: int, now: int, your_name := "") -> Array:
+static func standings(inst: Dictionary, calib: float, division: int, your_points: int, now: int, your_name := "", pace: float = 60.0) -> Array:
 	var rows := []
-	for b in bots(inst, calib, division):
+	for b in bots(inst, calib, division, pace):
 		rows.append({"name": b.name, "points": bot_points(b, inst, mini(now, inst.end)), "avatar": b.avatar, "you": false})
 	rows.append({"name": your_name, "points": your_points, "avatar": -1, "you": true})
 	rows.sort_custom(func(a, b): return a.points > b.points or (a.points == b.points and a.you))

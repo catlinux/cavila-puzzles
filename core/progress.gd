@@ -13,7 +13,7 @@ func _default() -> Dictionary:
 	return {"version": 2, "level": 1, "stars": {}, "scores": {}, "hints": 3, "daily": {},
 		"streak": {"last": "", "count": 0},
 		"event": {"week": -1, "count": 0, "claimed": false},
-		"leagues": {}, "division": 0,
+		"leagues": {}, "division": 0, "league_floor": 0, "score_v": 2,
 		"settings": {"lang": "", "sound": true, "vibration": true, "music": true,
 			"music_volume": 0.8, "sfx_volume": 0.8, "piece_style": "arrows"}}
 
@@ -31,10 +31,23 @@ func load_data() -> void:
 				for k in defaults["settings"]:
 					if not data["settings"].has(k):
 						data["settings"][k] = defaults["settings"][k]
+				if not parsed.has("score_v"):
+					_migrate_scores()
+
+
+## Puntuación a la escala nueva (antes un nivel daba unos 1500 puntos; ahora unos 100): se dividen
+## los récords por 15 y se descartan las ligas antiguas, que estaban en la escala vieja.
+func _migrate_scores() -> void:
+	for k in data["scores"].keys():
+		data["scores"][k] = int(round(float(data["scores"][k]) / 15.0))
+	data["leagues"] = {}
+	data["league_floor"] = now()
+	data["score_v"] = 2
 
 
 func reset() -> void:
 	data = _default()
+	data["league_floor"] = now()  # los rivales también empiezan de cero
 	save()
 
 
@@ -42,6 +55,7 @@ func reset() -> void:
 func reset_leagues() -> void:
 	data["leagues"] = {}
 	data["division"] = 0
+	data["league_floor"] = now()  # los rivales simulados también empiezan de cero desde ahora
 	save()
 
 
@@ -163,18 +177,21 @@ func league(type: String) -> Dictionary:
 	var all: Dictionary = data["leagues"]
 	if not all.has(inst.key):
 		var calib := 0.0
+		var pace := 60.0
 		var division := 0
 		var bias := tz_bias()
 		if type == "weekly":
 			calib = Leagues.points_per_level(current_level())
+			pace = Leagues.pace_per_level(current_level())
 			division = int(data["division"])
 		else:
 			var wk := league("weekly")
 			calib = float(wk.calib)
+			pace = float(wk.get("pace", pace))
 			division = int(wk.division)
 			bias = int(wk.get("bias", bias))
 		all[inst.key] = {"type": type, "start": inst.start, "end": inst.end, "points": 0,
-			"calib": calib, "division": division, "bias": bias, "claimed": false}
+			"calib": calib, "pace": pace, "division": division, "bias": bias, "claimed": false}
 	return all[inst.key]
 
 
@@ -188,8 +205,8 @@ func add_league_points(points: int) -> void:
 
 func league_standings(lg: Dictionary, at: int = -1) -> Array:
 	var inst := {"key": "%s:%d" % [lg.type, int(lg.start)], "type": lg.type, "start": int(lg.start), "end": int(lg.end),
-		"bias": int(lg.get("bias", tz_bias()))}
-	return Leagues.standings(inst, float(lg.calib), int(lg.division), int(lg.points), now() if at < 0 else at, tr("YOU"))
+		"bias": int(lg.get("bias", tz_bias())), "floor": int(data.get("league_floor", 0))}
+	return Leagues.standings(inst, float(lg.calib), int(lg.division), int(lg.points), now() if at < 0 else at, tr("YOU"), float(lg.get("pace", 60.0)))
 
 
 ## Aviso en vivo de una liga ("X te ha adelantado", "a N puntos del puesto K"); recuerda

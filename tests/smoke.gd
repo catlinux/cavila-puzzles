@@ -84,6 +84,30 @@ func _run() -> void:
 	await _frames(2)
 	check(lgs._list.get_child_count() == 15, "clasificación relámpago de 15")
 	check(lgs._notice.text != "", "aviso en vivo en la pantalla de ligas: " + lgs._notice.text)
+	# Scroll: la semanal (30 filas) no cabe en pantalla y se puede arrastrar con el dedo; el refresco
+	# automático no pierde el desplazamiento.
+	lgs._select("weekly")
+	await _frames(3)
+	var sc: ScrollContainer = lgs._scroll
+	check(sc.get_v_scroll_bar().max_value > sc.size.y + 100.0, "la clasificación semanal es más alta que su ventana")
+	# Ningún control de la lista captura el toque (si lo captura, el arrastre no llega al scroll).
+	var blockers := 0
+	var stack: Array = [lgs._list]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is Control and n.mouse_filter == Control.MOUSE_FILTER_STOP:
+			blockers += 1
+		stack.append_array(n.get_children())
+	check(blockers == 0, "las filas dejan pasar el arrastre al ScrollContainer (%d controles lo bloquean)" % blockers)
+	sc.scroll_vertical = 300
+	await _frames(2)
+	check(sc.scroll_vertical > 100, "la clasificación se puede desplazar (%d)" % sc.scroll_vertical)
+	var kept: int = sc.scroll_vertical
+	lgs._rebuild()
+	await _frames(3)
+	check(absi(sc.scroll_vertical - kept) <= 2, "al refrescarse la lista se conserva el desplazamiento (%d -> %d)" % [kept, sc.scroll_vertical])
+	lgs._select("flash")
+	await _frames(2)
 	lgs.queue_free()
 	await _frames(1)
 	Progress.now_override = Progress.now() + 9 * 86400

@@ -13,6 +13,7 @@ var world: Dictionary = {}
 var _tabs: Array = []
 var _info: Control
 var _notice: Label
+var _scroll: ScrollContainer
 var _sticky := ""  # aviso de adelantamiento: se mantiene un rato
 var _sticky_t := 0.0
 var _list: VBoxContainer
@@ -70,13 +71,15 @@ func _ready() -> void:
 	var note := Style.label(tr("SIM_NOTE"), 24, Style.SUB, "body")
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(note)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	card.add_child(scroll)
+	_scroll = ScrollContainer.new()
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.scroll_deadzone = 12
+	card.add_child(_scroll)
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_list.mouse_filter = Control.MOUSE_FILTER_PASS
 	_list.add_theme_constant_override("separation", 4)
-	scroll.add_child(_list)
+	_scroll.add_child(_list)
 	_rebuild()
 	Style.fade_in(self)
 
@@ -101,18 +104,22 @@ func _process(delta: float) -> void:
 	_refresh += delta
 	_sticky_t = maxf(_sticky_t - delta, 0.0)
 	_info.queue_redraw()
-	if _refresh > 5.0:  # los rivales siguen jugando: refrescar la tabla
+	if _refresh > 5.0 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):  # no refrescar con el dedo puesto
+		# los rivales siguen jugando: refrescar la tabla
 		_refresh = 0.0
 		_rebuild()
 
 
 func _rebuild() -> void:
+	var keep := _scroll.scroll_vertical  # la lista se refresca sola: no perder el desplazamiento
 	for c in _list.get_children():
+		c.remove_child(c)
 		c.queue_free()
 	var lg := Progress.league(type)
 	var rows := Progress.league_standings(lg)
 	for k in rows.size():
 		_list.add_child(_row(k + 1, rows[k], rows.size()))
+	_scroll.set_deferred("scroll_vertical", keep)
 	var n := Progress.league_notice(lg)
 	if n.key == "LG_PASSED":
 		_sticky = tr(n.key) % n.args
@@ -122,6 +129,7 @@ func _rebuild() -> void:
 
 func _row(rank: int, r: Dictionary, total: int) -> Control:
 	var c := Control.new()
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE  # el arrastre debe llegar al ScrollContainer
 	c.custom_minimum_size = Vector2(0, 92)
 	var promo := type == "weekly" and (rank <= Leagues.PROMOTE or rank > total - Leagues.PROMOTE)
 	c.draw.connect(func():
