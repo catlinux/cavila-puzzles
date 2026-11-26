@@ -38,6 +38,13 @@ func reset() -> void:
 	save()
 
 
+## Reinicia solo las ligas (puntos y división); niveles, estrellas y pistas no cambian.
+func reset_leagues() -> void:
+	data["leagues"] = {}
+	data["division"] = 0
+	save()
+
+
 func save() -> void:
 	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f:

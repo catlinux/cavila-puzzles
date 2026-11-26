@@ -183,5 +183,12 @@ func run() -> void:
 	check(pr.hints() == mini(hints0 + 3 + 4 + 8, ProgressScript.MAX_HINTS), "premios cobrados sin pasar del máximo (%d)" % pr.hints())
 	check(promoted == 1 and int(pr.data.division) == 1, "asciende de división")
 	check(pr.pending_league_results().is_empty() and pr.claim_league(pend[0].key) == 0, "no se cobra dos veces")
+	# Reiniciar ligas: borra puntos y división, pero no niveles ni estrellas.
+	pr.complete_level(2, 3, 500)
+	pr.data["division"] = 3
+	var lvl_before: int = pr.current_level()
+	pr.reset_leagues()
+	check(pr.data["leagues"].is_empty() and int(pr.data["division"]) == 0 and pr.current_level() == lvl_before and pr.stars(2) == 3, "reiniciar ligas no toca niveles ni estrellas")
+	check(int(pr.league("weekly").points) == 0, "tras reiniciar, la liga empieza de cero")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	pr.free()

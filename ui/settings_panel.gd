@@ -139,6 +139,11 @@ func _ready() -> void:
 	reset.font_size = 40
 	reset.pressed.connect(_confirm_reset)
 	vb.add_child(reset)
+	var reset_lg := PillButton.new(tr("RESET_LEAGUES"), false, 92.0)
+	reset_lg.icon_name = "arrow-counter-clockwise-bold"
+	reset_lg.font_size = 40
+	reset_lg.pressed.connect(_confirm_reset.bind(true))
+	vb.add_child(reset_lg)
 	var credits := Style.label(tr("CREDITS_TEXT"), 20, Style.SUB, "body_semi", HORIZONTAL_ALIGNMENT_CENTER)
 	credits.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credits.custom_minimum_size = Vector2(560, 0)
@@ -196,8 +201,8 @@ func _volume_row(vb: VBoxContainer, key: String, preview: Callable = Callable())
 	vb.add_child(sl)
 
 
-## Confirmación antes de borrar todo el progreso.
-func _confirm_reset() -> void:
+## Confirmación antes de borrar todo el progreso (o solo las ligas).
+func _confirm_reset(leagues_only := false) -> void:
 	var layer := Control.new()
 	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	layer.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -219,16 +224,19 @@ func _confirm_reset() -> void:
 	ic.texture = Style.icon("warning-fill", Style.RED, 84)
 	ic.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
 	vb.add_child(ic)
-	vb.add_child(Style.label(tr("RESET_TITLE"), 50, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
-	var txt := Style.label(tr("RESET_TEXT"), 28, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER)
+	vb.add_child(Style.label(tr("RESET_LEAGUES_TITLE" if leagues_only else "RESET_TITLE"), 50, Style.INK, "display_bold", HORIZONTAL_ALIGNMENT_CENTER))
+	var txt := Style.label(tr("RESET_LEAGUES_TEXT" if leagues_only else "RESET_TEXT"), 28, Style.SUB, "body", HORIZONTAL_ALIGNMENT_CENTER)
 	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	txt.custom_minimum_size = Vector2(520, 0)
 	vb.add_child(txt)
-	var yes := PillButton.new(tr("RESET_YES"), true, 112.0)
+	var yes := PillButton.new(tr("RESET_LEAGUES_YES" if leagues_only else "RESET_YES"), true, 112.0)
 	yes.font_size = 42
 	yes.set_colors(Style.RED, Color8(244, 114, 92))
 	yes.pressed.connect(func():
-		Progress.reset()
+		if leagues_only:
+			Progress.reset_leagues()
+		else:
+			Progress.reset()
 		Game.go_home())
 	vb.add_child(yes)
 	var no := PillButton.new(tr("CANCEL"), false, 96.0)
