@@ -14,6 +14,7 @@ func _default() -> Dictionary:
 		"streak": {"last": "", "count": 0},
 		"event": {"week": -1, "count": 0, "claimed": false},
 		"leagues": {}, "division": 0, "league_floor": 0, "score_v": 2,
+		"play_streak": {"last": "", "count": 0, "best": 0},
 		"settings": {"lang": "", "sound": true, "vibration": true, "music": true,
 			"music_volume": 0.8, "sfx_volume": 0.8, "piece_style": "arrows"}}
 
@@ -101,6 +102,7 @@ func complete_level(level: int, star_count: int, points: int = 0) -> Dictionary:
 		bonus += {"super": 1, "extra": 2}.get(preload("res://game/levels.gd").tier(level), 0)
 	bonus = add_hints(bonus) + _event_progress()
 	add_league_points(points)
+	note_played()
 	save()
 	return {"first": first, "hint_bonus": bonus, "record": record and not first}
 
@@ -299,8 +301,37 @@ func complete_daily(date_key: String) -> Dictionary:
 		data["streak"]["count"] = 1
 	data["streak"]["last"] = date_key
 	var got := add_hints(2)
+	note_played()
 	save()
 	return {"hint_bonus": got}
+
+
+## Fecha de hoy (AAAA-MM-DD) en la zona horaria del jugador.
+func today_key() -> String:
+	return Time.get_datetime_string_from_unix_time(now() + tz_bias() * 60).substr(0, 10)
+
+
+## Racha de DÍAS JUGADOS: días seguidos en los que se ha superado algún nivel o el reto diario.
+func note_played() -> void:
+	var key := today_key()
+	var ps: Dictionary = data.get("play_streak", {"last": "", "count": 0, "best": 0})
+	if ps.get("last", "") == key:
+		return
+	if ps.get("last", "") != "" and days_between(ps.last, key) == 1:
+		ps["count"] = int(ps.get("count", 0)) + 1
+	else:
+		ps["count"] = 1
+	ps["last"] = key
+	ps["best"] = maxi(int(ps.get("best", 0)), int(ps["count"]))
+	data["play_streak"] = ps
+
+
+## Racha de días jugados vigente (se pierde si ayer no se jugó).
+func play_streak() -> int:
+	var ps: Dictionary = data.get("play_streak", {})
+	if ps.get("last", "") == "":
+		return 0
+	return int(ps.get("count", 0)) if days_between(ps.last, today_key()) <= 1 else 0
 
 
 ## Racha vigente a fecha `today` (se pierde si ayer no se jugó).

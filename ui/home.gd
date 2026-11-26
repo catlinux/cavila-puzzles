@@ -67,6 +67,8 @@ func _ready() -> void:
 	head.add_child(name_l)
 	head.add_child(Chip.new("star-fill", Style.GOLD, str(Progress.total_stars())))
 	head.add_child(Chip.new("lightbulb-fill", Style.GOLD, str(Progress.hints())))
+	if Progress.play_streak() > 0:  # racha de días jugados
+		head.add_child(Chip.new("fire-fill", Color8(255, 122, 61), str(Progress.play_streak())))
 	var gear := RoundButton.new("gear-six-bold", 70.0)
 	gear.pressed.connect(_open_settings)
 	head.add_child(gear)

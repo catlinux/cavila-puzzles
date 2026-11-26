@@ -38,11 +38,12 @@ Anuncios obligatorios, vidas que se recargan por horas, muros de pago y notifica
 quejas más repetidas y chocan con lo que hoy diferencia a Cavila. Si algún día se monetiza: pistas opcionales
 con anuncio voluntario o una compra única para quitar límites, sin vender ventaja en las ligas.
 
-## Orden recomendado
-1. Compartir resultado (2): una tarde de trabajo y el mayor alcance.
-2. Misiones diarias (1) + escudo de racha (6).
-3. Coleccionables (5) cuando haya arte.
-4. Reta a un amigo (3) y calendario mensual (4).
+## Estado de las ideas (2026-11-26)
+- **Aprobadas en principio, por detallar**: misiones diarias (1) con premios como vidas ilimitadas temporales. Racha de días
+  jugados (6, variante): **hecha** (chip de llama en portada); premios por hitos pendientes.
+- **Vidas y pistas**: propuesta en `docs/VIDAS_Y_PISTAS.md`, por discutir.
+- **Aparcadas para discutir más adelante**: compartir resultado (2), reta a un amigo (3), calendario mensual (4),
+  coleccionables (5), modos extra (7), eventos semanales (8), logros (9) y ligas con usuarios reales (10).
 
 ## Fuentes
 - [Listados de juegos de flechas en tiendas](https://play.google.com/store/apps/details?id=com.arrow.arrows)

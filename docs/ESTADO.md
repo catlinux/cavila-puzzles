@@ -52,15 +52,11 @@ el porcentaje de aciertos (la simulación se colgaba): sigue pendiente; validar 
 - Sin usar aún: `stars`, `progress`.
 - Descartadas por texto deformado o "$": laurel original, moneda "100%", cofre "$".
 
-## Próximos pasos (plan acordado el 2026-11-26)
-Orden recomendado (detalle y fuentes en `docs/IDEAS.md`):
-1. **Compartir resultado del reto diario** (texto con estrellas y tiempo al portapapeles, estilo Wordle).
-2. **Misiones diarias** (3 objetivos pequeños con pista de premio) + **escudo de racha** que se gana jugando.
-3. **Coleccionables** (estilos de pieza y temas de tablero desbloqueables, insignias de liga) cuando haya arte.
-4. **Reta a un amigo** (compartir nivel y tiempo; niveles fijos, sin servidor) y **calendario mensual** del reto diario.
-5. Modos extra (contrarreloj, sin pistas), eventos semanales temáticos y logros.
-- **No hacer**: anuncios obligatorios, vidas que se recargan por horas, muros de pago, notificaciones insistentes.
-- Aún **sin empezar**: el usuario debe elegir por cuál se empieza (propuesta: 1 y 2).
+## Próximos pasos (actualizado 2026-11-26)
+- **Hecho**: racha de **días jugados** (`Progress.note_played` / `play_streak`, chip de llama en la portada; se cuenta al superar un nivel o el reto diario). Rivales de las ligas siempre activos (cada rival tiene su huso `SHIFTS`, hora local del jugador).
+- **Por discutir** (`docs/VIDAS_Y_PISTAS.md`): sistema de **vidas** globales (5, +1 cada 30 min, +1 cada 10 niveles), recuperación de **pistas**, premios de racha y **misiones diarias** con premios (p. ej. vidas ilimitadas 30/60 min).
+- **Aparcado** hasta que el usuario lo retome (`docs/IDEAS.md`): compartir resultado, reta a un amigo, calendario mensual, coleccionables, modos extra, eventos semanales, logros.
+- **No hacer**: anuncios obligatorios, muros de pago, notificaciones insistentes.
 
 ## Ligas con usuarios reales: pendiente de decidir
 Todo en `docs/LIGAS_ONLINE.md`. Decidido: solo Android; mezcla de reales y simulados con tope de 30 por grupo; apodo automático

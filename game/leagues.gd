@@ -77,8 +77,11 @@ static func pace_per_level(level: int) -> float:
 
 
 ## Actividad relativa por hora local (0-23): poca de madrugada, mucha por la tarde y la noche.
-const ACTIVITY := [0.30, 0.15, 0.08, 0.05, 0.05, 0.08, 0.20, 0.40, 0.55, 0.60, 0.60, 0.70,
-	0.85, 0.90, 0.75, 0.70, 0.80, 0.95, 1.00, 1.00, 1.00, 0.95, 0.75, 0.50]
+const ACTIVITY := [0.35, 0.22, 0.15, 0.12, 0.12, 0.15, 0.25, 0.45, 0.55, 0.60, 0.60, 0.70,
+	0.85, 0.90, 0.75, 0.70, 0.80, 0.95, 1.00, 1.00, 1.00, 0.95, 0.80, 0.55]
+## Cada rival vive en su propio huso respecto al jugador (horas): siempre hay alguien jugando,
+## también de madrugada (otros países, turnos de noche, trasnochadores).
+const SHIFTS := [0, 0, 0, 0, 0, 2, -2, 4, -4, 7, -7, 10]
 const REGULARS := 14   # rivales habituales que reaparecen entre ligas
 const TZ_BIAS_MIN := 60  # las horas de actividad se calculan en hora peninsular
 
@@ -192,11 +195,12 @@ static func week_bots(week: Dictionary, calib: float, division: int = 0, pace: f
 		var lvl_per_hour := 3600.0 / secs_per_level
 		var per_level := calib * (0.8 + 0.2 * skill) * rng.randf_range(0.9, 1.1)
 		var sessions := []
+		var shift: int = SHIFTS[rng.randi() % SHIFTS.size()]
 		if rng.randf() > 0.06:  # unos pocos se apuntan y no juegan en toda la semana
-			var count := 10 + rng.randi() % 15
+			var count := 24 + rng.randi() % 22
 			for _s in count:
-				var len_s := rng.randf_range(5.0, 20.0) * 60.0
-				sessions.append([_session_start(rng, week, dur, len_s), len_s])
+				var len_s := rng.randf_range(5.0, 15.0) * 60.0
+				sessions.append([_session_start(rng, week, dur, len_s, shift), len_s])
 		out.append({"name": ids[k].name, "avatar": ids[k].avatar, "per_level": per_level,
 			"lph": lvl_per_hour / 3600.0, "rate": per_level * lvl_per_hour / 3600.0, "sessions": sessions,
 			"week_start": int(week.start)})
@@ -228,12 +232,14 @@ static func bots(inst: Dictionary, calib: float, division: int = 0, pace: float 
 	return out.slice(0, want)
 
 
-## Inicio de una sesión de juego: más probable a las horas de más actividad.
-static func _session_start(rng: RefCounted, inst: Dictionary, dur: float, len_s: float) -> float:
+## Inicio de una sesión de juego: más probable a las horas de más actividad (en hora local del
+## jugador desplazada por el huso del rival).
+static func _session_start(rng: RefCounted, inst: Dictionary, dur: float, len_s: float, shift: int = 0) -> float:
 	var at := 0.0
+	var bias_h: float = float(inst.get("bias", TZ_BIAS_MIN)) / 60.0
 	for _try in 12:
 		at = rng.randf_range(0.0, maxf(dur - len_s, 1.0))
-		var hour := int(floorf((float(inst.start) + at) / 3600.0 + TZ_BIAS_MIN / 60.0)) % 24
+		var hour := posmod(int(floorf((float(inst.start) + at) / 3600.0 + bias_h)) + shift, 24)
 		if rng.randf() < ACTIVITY[hour]:
 			break
 	return at

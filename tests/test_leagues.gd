@@ -102,12 +102,12 @@ func run() -> void:
 	var night := 0
 	for b in Leagues.bots(wk, calib):
 		for s2 in b.sessions:
-			var h := int(floorf((wk.start + s2[0]) / 3600.0 + 1.0)) % 24
+			var h := int(floorf((wk.start + s2[0]) / 3600.0)) % 24
 			if h >= 17 and h <= 22:
 				evening += 1
 			elif h >= 2 and h <= 5:
 				night += 1
-	check(evening > night * 2, "más actividad de tarde que de madrugada (%d vs %d)" % [evening, night])
+	check(evening > night * 1.2 and night > 10, "más actividad de tarde que de madrugada, pero siempre hay alguien (%d vs %d)" % [evening, night])
 	var rws := [{"name": "A", "points": 500, "you": false}, {"name": "B", "points": 300, "you": false},
 		{"name": "Tú", "points": 100, "you": true}]
 	var n0 := Leagues.notice(rws, null)
@@ -217,6 +217,39 @@ func run() -> void:
 	check(pold.best_score(1) == 100 and pold.best_score(2) == 200 and pold.data["leagues"].is_empty() and int(pold.data["league_floor"]) == now, "partida antigua: récords a la escala nueva y ligas descartadas")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(old_path))
 	pold.free()
+	# Racha de días jugados.
+	var ps = ProgressScript.new()
+	ps.save_path = "user://test_streak.json"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_streak.json"))
+	ps.load_data()
+	ps.now_override = 1795429800  # lunes
+	check(ps.play_streak() == 0, "sin partidas no hay racha")
+	ps.complete_level(1, 3, 100)
+	ps.complete_level(2, 3, 100)
+	check(ps.play_streak() == 1, "dos niveles el mismo día cuentan un día")
+	ps.now_override += 86400
+	check(ps.play_streak() == 1, "al día siguiente la racha sigue viva hasta que se juegue")
+	ps.complete_level(3, 3, 100)
+	ps.now_override += 86400
+	ps.complete_level(4, 3, 100)
+	check(ps.play_streak() == 3, "tres días seguidos: racha de 3 (%d)" % ps.play_streak())
+	ps.now_override += 2 * 86400
+	check(ps.play_streak() == 0, "si se salta un día, la racha se pierde")
+	ps.complete_level(5, 3, 100)
+	check(ps.play_streak() == 1 and int(ps.data["play_streak"].best) == 3, "se vuelve a empezar y se recuerda la mejor (3)")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_streak.json"))
+	ps.free()
+
+	# Rivales activos incluso tras reiniciar de madrugada (siempre hay alguien jugando).
+	var night_t := now - 2 * 86400 + 3 * 3600  # 03:00 UTC de hace dos días
+	var nwk := Leagues.instance("weekly", night_t)
+	nwk["floor"] = night_t
+	var n_act := 0
+	for r in Leagues.standings(nwk, pts55, 0, 0, night_t + 5 * 3600, "Tú", pace55):
+		if not r.you and r.points > 0:
+			n_act += 1
+	check(n_act >= 6, "5 horas después de reiniciar de madrugada hay rivales con puntos (%d)" % n_act)
+
 	# Reiniciar ligas: borra puntos y división, pero no niveles ni estrellas.
 	pr.complete_level(2, 3, 500)
 	pr.data["division"] = 3
