@@ -64,9 +64,9 @@ Ninguna defensa es perfecta con un juego offline; el objetivo es que hacer tramp
 4. Moderación (reportes, filtro) y borrado de cuenta.
 5. Reducir el relleno simulado a medida que haya jugadores.
 
-## 9. Decisiones tuyas
-1. ¿Servidor? (recomiendo Supabase; alternativa: Google Play Games si solo importa Android y se acepta perder grupos y divisiones).
-2. ¿Plataformas? Solo Android o también iOS más adelante (afecta al inicio de sesión).
-3. ¿Se acepta mezclar reales con simulados marcados al principio, o se espera a tener masa crítica?
-4. ¿Apodos libres con filtro, o solo apodos prefabricados?
-5. ¿Público objetivo y clasificación por edad?
+## 9. Decisiones tomadas (2026-11-26)
+- **Plataforma: solo Android** (sin iOS). Se publica en Google Play; el inicio de sesión opcional será Google Play Games.
+- **Reales y simulados mezclados desde el principio**: cada grupo tiene un tope total (30). Los puestos que no ocupen jugadores reales los rellenan rivales simulados (marcados como tales). Los reales ocupan puestos primero; cuando haya masa crítica, los simulados desaparecen.
+- **Apodo**: se genera uno automático al instalar (como los de la simulación) y se puede cambiar libremente, con filtro (longitud, palabras ofensivas, sin enlaces ni datos de contacto) y botón de reportar.
+- **Edades**: sin decidir (ver «Problemas de publicar para todas las edades» en la conversación): se propone ranking online solo para mayores de 14 con una pantalla de edad neutra; los menores juegan con ligas simuladas.
+- **Servidor**: pendiente de decidir (recomendado Supabase; el plan gratuito sirve para pruebas, pero se pausa por inactividad).
