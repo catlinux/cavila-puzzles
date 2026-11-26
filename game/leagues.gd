@@ -13,6 +13,7 @@ extends RefCounted
 
 const Rng = preload("res://core/rng.gd")
 const Levels = preload("res://game/levels.gd")
+const Countries = preload("res://game/countries.gd")
 
 const TYPES := ["flash", "daily", "weekly"]
 const CONFIG := {
@@ -29,21 +30,6 @@ const PROMOTE := 5  # en la semanal suben los 5 primeros y bajan los 5 últimos
 const AVATAR_KIND := "nnnnnnnnnnnnnnnnnnnnnfffffffmmmmmmmm"
 const AVATAR_KIN := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 22, 25, 23, 26, 27, 28, 29, 30, 31, 32, 33]
 const AVATAR_COUNT := 36
-
-const NAMES_F := ["Lucía M.", "Aitana", "Carmen R.", "sofia88", "Mireia", "martina.v", "Ainhoa", "Daniela",
-	"emma_c", "Laia", "Clàudia", "Irene", "Júlia", "sara_lm", "Lola", "Paula G.", "Vega", "Elena", "Marina",
-	"Abril", "Nerea", "Olivia", "Candela", "Jana", "Berta", "Cristina", "Ona", "Carla", "Mar", "Alba S.",
-	"Rocío", "Inés", "Aina", "Lía", "Noa", "Celia", "Valeria", "Anna P.", "Gemma", "Maite", "Sílvia", "Núria",
-	"Paloma", "Rosa M."]
-const NAMES_M := ["marc_puig", "JaviG", "Iker", "pau13", "Jordi B.", "Hugo_V", "LeoZ", "Oriol", "Álex P.", "Nil",
-	"Bruno", "Mateo", "raul92", "Gael", "Pol R.", "Adrián", "Biel", "Arnau", "Unai", "Hèctor", "quim_s", "Thiago",
-	"Rubén", "Ferran", "dani_k", "Marcos", "Izan", "Tomás", "Eric", "Lucas", "Miguel A.", "Enzo", "Joel", "Sergi",
-	"Teo", "Gonzalo", "Xavi", "Andreu", "Roger", "Víctor", "Dídac", "Samuel", "Pere", "Jaume"]
-## Apodos para quien usa un avatar de animal (también hay quien usa su nombre real).
-const NAMES_N := ["LunaFox", "zenpanda", "n0va", "KoalaKid", "Bruma", "pixel_owl", "Tito99", "Mochi", "Cometa",
-	"Nube", "TigreRoig", "ElOso", "sloth_mode", "PinguiX", "Kiwi", "Churro", "Pistacho", "Ondas", "Brisa", "Zorro_",
-	"Tortuga77", "MarAzul", "Bambú", "Cacao", "Trufa", "Valen", "NoraLuna", "Sombra", "Chispa7", "Menta"]
-
 
 ## Liga en curso de un tipo: {key, type, start, end} (tiempos unix). `bias_min` = zona horaria.
 static func instance(type: String, now: int, bias_min: int = 0) -> Dictionary:
@@ -79,11 +65,7 @@ static func pace_per_level(level: int) -> float:
 ## Actividad relativa por hora local (0-23): poca de madrugada, mucha por la tarde y la noche.
 const ACTIVITY := [0.35, 0.22, 0.15, 0.12, 0.12, 0.15, 0.25, 0.45, 0.55, 0.60, 0.60, 0.70,
 	0.85, 0.90, 0.75, 0.70, 0.80, 0.95, 1.00, 1.00, 1.00, 0.95, 0.80, 0.55]
-## Cada rival vive en su propio huso respecto al jugador (horas): siempre hay alguien jugando,
-## también de madrugada (otros países, turnos de noche, trasnochadores).
-const SHIFTS := [0, 0, 0, 0, 0, 2, -2, 4, -4, 7, -7, 10]
 const REGULARS := 14   # rivales habituales que reaparecen entre ligas
-const TZ_BIAS_MIN := 60  # las horas de actividad se calculan en hora peninsular
 
 
 ## Rivales habituales: siempre los mismos (avatar + nombre + habilidad propia).
@@ -119,26 +101,27 @@ static func _pick_identities(key: String, count: int, taken_avatars: Array, take
 			break
 		if not picks.has(a) and not taken_avatars.has(a):
 			picks.append(a)
-	var pools := {"f": Rng.shuffle(NAMES_F.duplicate(), rng), "m": Rng.shuffle(NAMES_M.duplicate(), rng),
-		"n": Rng.shuffle(NAMES_N.duplicate(), rng)}
+	var nicks: Array = Rng.shuffle(Countries.NICKS.duplicate(), rng)
 	var out := []
 	for a in picks:
 		var kind: String = AVATAR_KIND[a]
-		var pool_key := kind
-		if kind == "n" and rng.randf() < 0.45:
-			pool_key = "f" if rng.randf() < 0.5 else "m"  # animal con nombre real
+		var country := Countries.pick(rng)
+		var gender := kind
+		if kind == "n":
+			# Avatar de animal: casi siempre un apodo; a veces la persona usa su nombre de pila.
+			gender = "n" if rng.randf() >= 0.45 else ("f" if rng.randf() < 0.5 else "m")
 		var nm := ""
-		while nm == "":
-			if pools[pool_key].is_empty():
-				pool_key = "n" if not pools["n"].is_empty() else ("f" if not pools["f"].is_empty() else "m")
-				if pools[pool_key].is_empty():
-					nm = "Jugador %d" % (out.size() + 1)
-					break
-			var cand: String = pools[pool_key].pop_back()
-			if not taken_names.has(cand):
-				nm = cand
+		if gender == "n":
+			while not nicks.is_empty() and nm == "":
+				var cand: String = nicks.pop_back()
+				if not taken_names.has(cand):
+					nm = cand
+			if nm == "":
+				gender = "f" if rng.randf() < 0.5 else "m"
+		if nm == "":
+			nm = Countries.make_name(rng, country, gender, taken_names)
 		taken_names[nm] = true
-		out.append({"avatar": a, "name": nm})
+		out.append({"avatar": a, "name": nm, "country": country, "gender": gender})
 	return out
 
 
@@ -195,13 +178,14 @@ static func week_bots(week: Dictionary, calib: float, division: int = 0, pace: f
 		var lvl_per_hour := 3600.0 / secs_per_level
 		var per_level := calib * (0.8 + 0.2 * skill) * rng.randf_range(0.9, 1.1)
 		var sessions := []
-		var shift: int = SHIFTS[rng.randi() % SHIFTS.size()]
+		var country: String = ids[k].country
+		var offset_h: int = Countries.offset(rng, country)  # juega en SUS horas normales
 		if rng.randf() > 0.06:  # unos pocos se apuntan y no juegan en toda la semana
 			var count := 24 + rng.randi() % 22
 			for _s in count:
 				var len_s := rng.randf_range(5.0, 15.0) * 60.0
-				sessions.append([_session_start(rng, week, dur, len_s, shift), len_s])
-		out.append({"name": ids[k].name, "avatar": ids[k].avatar, "per_level": per_level,
+				sessions.append([_session_start(rng, week, dur, len_s, offset_h), len_s])
+		out.append({"name": ids[k].name, "avatar": ids[k].avatar, "country": country, "per_level": per_level,
 			"lph": lvl_per_hour / 3600.0, "rate": per_level * lvl_per_hour / 3600.0, "sessions": sessions,
 			"week_start": int(week.start)})
 	return out
@@ -232,14 +216,13 @@ static func bots(inst: Dictionary, calib: float, division: int = 0, pace: float 
 	return out.slice(0, want)
 
 
-## Inicio de una sesión de juego: más probable a las horas de más actividad (en hora local del
-## jugador desplazada por el huso del rival).
-static func _session_start(rng: RefCounted, inst: Dictionary, dur: float, len_s: float, shift: int = 0) -> float:
+## Inicio de una sesión de juego: más probable a las horas de más actividad EN LA HORA LOCAL DEL
+## RIVAL (`offset_h` = su huso respecto a UTC; `inst.start` es hora UTC).
+static func _session_start(rng: RefCounted, inst: Dictionary, dur: float, len_s: float, offset_h: int = 0) -> float:
 	var at := 0.0
-	var bias_h: float = float(inst.get("bias", TZ_BIAS_MIN)) / 60.0
 	for _try in 12:
 		at = rng.randf_range(0.0, maxf(dur - len_s, 1.0))
-		var hour := posmod(int(floorf((float(inst.start) + at) / 3600.0 + bias_h)) + shift, 24)
+		var hour := posmod(int(floorf((float(inst.start) + at) / 3600.0)) + offset_h, 24)
 		if rng.randf() < ACTIVITY[hour]:
 			break
 	return at
@@ -270,8 +253,8 @@ static func bot_points(bot: Dictionary, inst: Dictionary, now: int) -> int:
 static func standings(inst: Dictionary, calib: float, division: int, your_points: int, now: int, your_name := "", pace: float = 60.0) -> Array:
 	var rows := []
 	for b in bots(inst, calib, division, pace):
-		rows.append({"name": b.name, "points": bot_points(b, inst, mini(now, inst.end)), "avatar": b.avatar, "you": false})
-	rows.append({"name": your_name, "points": your_points, "avatar": -1, "you": true})
+		rows.append({"name": b.name, "points": bot_points(b, inst, mini(now, inst.end)), "avatar": b.avatar, "you": false, "country": b.country})
+	rows.append({"name": your_name, "points": your_points, "avatar": -1, "you": true, "country": ""})
 	rows.sort_custom(func(a, b): return a.points > b.points or (a.points == b.points and a.you))
 	return rows
 

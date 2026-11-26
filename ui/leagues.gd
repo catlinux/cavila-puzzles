@@ -5,6 +5,7 @@ const Style = preload("res://ui/style.gd")
 const Levels = preload("res://game/levels.gd")
 const Leagues = preload("res://game/leagues.gd")
 const Backdrop = preload("res://ui/backdrop.gd")
+const Flags = preload("res://ui/flags.gd")
 const RoundButton = preload("res://ui/widgets/round_button.gd")
 const PillButton = preload("res://ui/widgets/pill_button.gd")
 
@@ -154,6 +155,8 @@ func _row(rank: int, r: Dictionary, total: int) -> Control:
 			c.draw_texture(ic, Vector2(112, cy) - ic.get_size() / 2.0)
 		else:
 			c.draw_texture_rect(Style.avatar(int(r.avatar)), Rect2(Vector2(112, cy) - Vector2(32, 32), Vector2(64, 64)), false)
+			if String(r.get("country", "")) != "":  # bandera en la esquina del avatar
+				Flags.draw(c, Rect2(Vector2(112, cy) + Vector2(2, 10), Vector2(34, 24)), String(r.country))
 		c.draw_string(Style.font("display" if r.you else "body"), Vector2(164, cy + 12), r.name,
 			HORIZONTAL_ALIGNMENT_LEFT, c.size.x - 360, 32, Style.INK)
 		var pts := Style.fmt_int(r.points)

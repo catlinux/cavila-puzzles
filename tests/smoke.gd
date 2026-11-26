@@ -344,9 +344,10 @@ func _run() -> void:
 				kin[LG.AVATAR_KIN[e.avatar]] = true
 				nm[e.name] = true
 				if LG.AVATAR_KIND[e.avatar] == "f":
-					check(not LG.NAMES_M.has(e.name), "avatar femenino sin nombre masculino")
+					check(e.gender == "f", "avatar femenino con nombre femenino")
 				if LG.AVATAR_KIND[e.avatar] == "m":
-					check(not LG.NAMES_F.has(e.name), "avatar masculino sin nombre femenino")
+					check(e.gender == "m", "avatar masculino con nombre masculino")
+				check(LG.Countries.COUNTRIES.has(e.country), "país válido")
 			check(av.size() == ids.size() and nm.size() == ids.size(), "avatares y nombres únicos en %s" % t)
 			check(kin.size() == ids.size(), "sin avatares gemelos en %s" % t)
 	check(LG.AVATAR_KIND.length() == LG.AVATAR_COUNT and LG.AVATAR_KIN.size() == LG.AVATAR_COUNT, "metadatos de avatares")

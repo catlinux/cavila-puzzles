@@ -158,6 +158,50 @@ func run() -> void:
 			act_fl += 1
 	check(act_fl >= 5, "la liga flash tiene actividad (%d rivales con puntos)" % act_fl)
 
+	# Países: más probables los más poblados, EE. UU. contenido, nombres acordes y horas normales.
+	var Countries = Leagues.Countries
+	var wsum := 0
+	for code in Countries.COUNTRIES:
+		wsum += int(Countries.COUNTRIES[code].w)
+		check(Countries.COUNTRIES[code].f.size() >= 12 and Countries.COUNTRIES[code].m.size() >= 12, "nombres suficientes en %s" % code)
+	check(wsum == 100, "los pesos de los países suman 100 (%d)" % wsum)
+	var flags_codes: Array = preload("res://ui/flags.gd").CODES
+	check(flags_codes.size() == Countries.COUNTRIES.size(), "hay bandera para cada país")
+	for code in Countries.COUNTRIES:
+		check(flags_codes.has(code), "bandera de %s" % code)
+	var crng := Rng.make(99)
+	var cnt := {}
+	for _k in 4000:
+		var cc: String = Countries.pick(crng)
+		cnt[cc] = int(cnt.get(cc, 0)) + 1
+	check(cnt.get("ES", 0) > cnt.get("MX", 0) and cnt.get("MX", 0) > cnt.get("AR", 0) and cnt.get("US", 0) < 4000 * 0.05, "ES > MX > AR y EE. UU. contenido (ES %d, MX %d, AR %d, US %d)" % [cnt.get("ES", 0), cnt.get("MX", 0), cnt.get("AR", 0), cnt.get("US", 0)])
+	var latam := int(cnt.get("MX", 0)) + int(cnt.get("AR", 0)) + int(cnt.get("CO", 0)) + int(cnt.get("CL", 0)) + int(cnt.get("PE", 0)) + int(cnt.get("VE", 0)) + int(cnt.get("EC", 0)) + int(cnt.get("BR", 0))
+	check(latam > 4000 * 0.4, "América latina es la zona más frecuente (%d de 4000)" % latam)
+	# Cada rival juega en sus horas normales (en SU hora local, la mayoría de sesiones entre las 7 y las 24).
+	var off_of := {}
+	for code in Countries.COUNTRIES:
+		off_of[code] = Countries.COUNTRIES[code].off
+	var normal := 0
+	var total_s := 0
+	var by_country := {}
+	for b in Leagues.bots(wk, calib):
+		by_country[b.country] = true
+		for s2 in b.sessions:
+			var utc_h := int(floorf((wk.start + s2[0]) / 3600.0)) % 24
+			var ok_h := false
+			for off in off_of[b.country]:
+				var lh: int = posmod(utc_h + int(off), 24)
+				if lh >= 7:
+					ok_h = true
+			total_s += 1
+			if ok_h:
+				normal += 1
+	check(total_s > 0 and normal > total_s * 0.85, "los rivales juegan en sus horas normales (%d de %d sesiones)" % [normal, total_s])
+	check(by_country.size() >= 4, "una liga mezcla varios países (%d)" % by_country.size())
+	for b in Leagues.bots(wk, calib):
+		check(Countries.COUNTRIES.has(b.country), "rival con país válido")
+		break
+
 	# Puntuación: escala moderada y competitiva.
 	var pts55 := Leagues.points_per_level(55)
 	check(pts55 > 60.0 and pts55 < 600.0 and Leagues.points_per_level(5) < pts55, "un nivel da cientos de puntos, no miles (%d)" % int(pts55))

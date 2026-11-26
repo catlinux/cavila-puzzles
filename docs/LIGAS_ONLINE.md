@@ -95,3 +95,9 @@ enviar puntos, pedir clasificación, cambiar apodo, reportar y borrar cuenta (6 
 - **Datos que faltan para decidir**: RAM/CPU/disco del VPS, sistema operativo, país del centro de datos,
   si hay dominio disponible y si ya corre otros servicios.
 
+## 11. Bandera de los jugadores reales
+En la simulación cada rival muestra la bandera de su país junto al avatar. Con jugadores reales se puede mantener:
+el país se tomaría de la región del dispositivo (dato grueso, no identifica a nadie) y el jugador podría ocultarlo en
+Ajustes. Los rivales simulados que rellenan el grupo seguirían usando los países ponderados de `game/countries.gd`,
+así que reales y simulados se verían igual (los simulados, marcados como tales).
+
