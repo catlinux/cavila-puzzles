@@ -215,6 +215,16 @@ func run() -> void:
 	pold.now_override = now
 	pold.load_data()
 	check(pold.best_score(1) == 100 and pold.best_score(2) == 200 and pold.data["leagues"].is_empty() and int(pold.data["league_floor"]) == now, "partida antigua: récords a la escala nueva y ligas descartadas")
+	# La migración ocurre UNA sola vez: abrir la app varias veces sin jugar no reinicia a los rivales
+	# ni divide otra vez los récords (fallo real: se repetía en cada arranque).
+	var floor0: int = int(pold.data["league_floor"])
+	for launch in 3:
+		var pn = ProgressScript.new()
+		pn.save_path = old_path
+		pn.now_override = now + (launch + 1) * 3 * 3600
+		pn.load_data()
+		check(int(pn.data["league_floor"]) == floor0 and pn.best_score(1) == 100, "abrir la app otra vez no repite la migración (arranque %d)" % launch)
+		pn.free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(old_path))
 	pold.free()
 	# Racha de días jugados.

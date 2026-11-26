@@ -44,6 +44,7 @@ func _migrate_scores() -> void:
 	data["leagues"] = {}
 	data["league_floor"] = now()
 	data["score_v"] = 2
+	save()  # imprescindible: si no se guarda, la migración se repetiría en cada arranque
 
 
 func reset() -> void:
